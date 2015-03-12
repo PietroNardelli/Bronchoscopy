@@ -63,9 +63,11 @@ class BronchoscopyWidget:
 
     self.coordinates = []
 
-    self.needleCalibrationTransform = None
+    self.probeCalibrationTransform = None
+    self.centerlineCompensationTransform = None
     self.cameraForNavigation = None
     self.cNode = None
+    self.probeToTrackerTransformNode = None
 
     self.updateGUI()
 
@@ -610,12 +612,11 @@ class BronchoscopyWidget:
     
     NthFiducial = 0
     point = [0,0,0]
-    prova = [0,0,0]
-    for i in xrange(NoP):
-      centerlineModelNode.GetPoint(i,point)
-      fiducialList.AddFiducial(point[0],point[1],point[2])
-      fiducialList.SetNthMarkupVisibility(NthFiducial,0)
-      NthFiducial += 1
+
+    centerlineModelNode.GetPoint(i,point)
+    fiducialList.AddFiducial(point[0],point[1],point[2])
+    fiducialList.SetNthMarkupVisibility(NthFiducial,0)
+    NthFiducial += 1
 
   def Smoothing(self, pathModel, iterationsNumber):
     
@@ -930,42 +931,68 @@ class BronchoscopyWidget:
       #self.NavigationButton.enabled = False
       self.MatlabTrackButton.text = "Stop Tracking"
 
-      cNodes = slicer.mrmlScene.GetNodesByName('Catheter')
       if self.cNode == None:
-        self.cNode = slicer.vtkMRMLIGTLConnectorNode()
-        slicer.mrmlScene.AddNode(self.cNode)
-        self.cNode.SetName('Catheter')
-  
+        cNodes = slicer.mrmlScene.GetNodesByName('ProbeConnector')
+        if cNodes.GetNumberOfItems() == 0:
+          self.cNode = slicer.vtkMRMLIGTLConnectorNode()
+          slicer.mrmlScene.AddNode(self.cNode)
+          self.cNode.SetName('ProbeConnector')
+        else:
+          self.cNode = cNodes.GetItemAsObject(0)
+
       self.cNode.SetType(1)
       self.cNode.SetTypeServer(18944)
       self.cNode.Start()
 
-      if self.needleCalibrationTransform == None:
- 	self.needleCalibrationTransform = slicer.vtkMRMLLinearTransformNode()
-        self.needleCalibrationTransform.SetName('needleCalibrationTransform')
-        slicer.mrmlScene.AddNode(self.needleCalibrationTransform)
-      
+      ################## This turns the probe of 90 degrees #####################
+      if self.probeCalibrationTransform == None:
+        calibrationTransformNodes = slicer.mrmlScene.GetNodesByName('probeCalibrationTransform')
+        if calibrationTransformNodes.GetNumberOfItems() == 0:
+          self.probeCalibrationTransform = slicer.vtkMRMLLinearTransformNode()
+          self.probeCalibrationTransform.SetName('probeCalibrationTransform')
+          slicer.mrmlScene.AddNode(self.probeCalibrationTransform)
+        else:
+ 	  self.probeCalibrationTransform = calibrationTransformNodes.GetItemAsObject(0)
+            
       calibrationMatrix = vtk.vtkMatrix4x4()
-      self.needleCalibrationTransform.GetMatrixTransformToParent(calibrationMatrix)
+      self.probeCalibrationTransform.GetMatrixTransformToParent(calibrationMatrix)
       calibrationMatrix.SetElement(0,0,0)
       calibrationMatrix.SetElement(0,2,1)
       calibrationMatrix.SetElement(2,0,-1)
       calibrationMatrix.SetElement(2,2,0)
-      self.needleCalibrationTransform.SetMatrixTransformToParent(calibrationMatrix)
+      self.probeCalibrationTransform.SetMatrixTransformToParent(calibrationMatrix)
 
-      needleModelNodes = slicer.mrmlScene.GetNodesByName('NeedleModel')
+      if self.centerlineCompensationTransform == None:
+        centerlineCompensationTransformNodes = slicer.mrmlScene.GetNodesByName('centerlineCompensationTransform')
+        if centerlineCompensationTransformNodes.GetNumberOfItems() == 0:
+          self.centerlineCompensationTransform = slicer.vtkMRMLLinearTransformNode()
+          self.centerlineCompensationTransform.SetName('centerlineCompensationTransform')
+          slicer.mrmlScene.AddNode(self.centerlineCompensationTransform)
+        else:
+          self.centerlineCompensationTransform = centerlineCompensationTransformNodes.GetItemAsObject(0)
+
+      needleModelNodes = slicer.mrmlScene.GetNodesByName('ProbeModel')
       if needleModelNodes.GetNumberOfItems() > 0:
-        catheterNode = needleModelNodes.GetItemAsObject(0)
-        if catheterNode.GetTransformNodeID() == None:
-          catheterNode.SetAndObserveTransformNodeID(self.needleCalibrationTransform.GetID())
+        probeNode = needleModelNodes.GetItemAsObject(0)
+        if probeNode.GetTransformNodeID() == None:
+          probeNode.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
 
-      cameraNodes = slicer.mrmlScene.GetNodesByClass('vtkMRMLCameraNode')
+      ################## Camera is connected to the transform #####################
+      cameraNodes = slicer.mrmlScene.GetNodesByName('PerspexCamera')
       if cameraNodes.GetNumberOfItems() > 0:
         self.cameraForNavigation = cameraNodes.GetItemAsObject(0)
         if self.cameraForNavigation.GetTransformNodeID() == None:
           self.cameraForNavigation.SetPosition(-1.0,-0.0,0.0)
-          self.cameraForNavigation.SetFocalPoint(-3.0,0.0,0.0)
-          self.cameraForNavigation.SetAndObserveTransformNodeID(self.needleCalibrationTransform.GetID())
+          self.cameraForNavigation.SetFocalPoint(-6.0,0.0,0.0)
+          self.cameraForNavigation.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
+      else:
+        cameraNodes = slicer.mrmlScene.GetNodesByClass('vtkMRMLCameraNode')
+	self.cameraForNavigation = cameraNodes.GetItemAsObject(0)
+        if cameraNodes.GetNumberOfItems() > 0:
+          if self.cameraForNavigation.GetTransformNodeID() == None:
+            self.cameraForNavigation.SetPosition(-1.0,-0.0,0.0)
+            self.cameraForNavigation.SetFocalPoint(-6.0,0.0,0.0)
+            self.cameraForNavigation.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
 
       lm = slicer.app.layoutManager()
       yellowWidget = lm.sliceWidget('Yellow')
@@ -976,12 +1003,13 @@ class BronchoscopyWidget:
       self.greenLogic = greenWidget.sliceLogic()
 
       self.sensorTimer.start()
+       
     else:
       self.sensorTimer.stop()
       self.cNode.Stop()
       #self.cNode = None
       #self.cameraForNavigation = None
-      #self.needleCalibrationTransform = None
+      #self.probeCalibrationTransform = None
       #self.carina = 0
       #self.CreatePathButton.enabled = True
       #self.flythroughCollapsibleButton.enabled = True
@@ -990,155 +1018,103 @@ class BronchoscopyWidget:
 
   def ReadPosition(self):
       if self.cNode.GetState() == 2:
-        transformNodes = slicer.mrmlScene.GetNodesByName('ProbeToTracker')
-        tNode = transformNodes.GetItemAsObject(0)        
-        if tNode:
-          if self.needleCalibrationTransform.GetTransformNodeID() == None:
-            self.needleCalibrationTransform.SetAndObserveTransformNodeID(tNode.GetID())
+        transformNodesCollection = slicer.mrmlScene.GetNodesByName('ProbeToTracker')
+        if self.probeToTrackerTransformNode == None:
+          self.probeToTrackerTransformNode = transformNodesCollection.GetItemAsObject(0)        
+
+	######################Testing centerline compensation#########################
+
+        if self.probeToTrackerTransformNode:
           transformMatrix = vtk.vtkMatrix4x4()
-          tNode.GetMatrixTransformToParent(transformMatrix)
-          x = transformMatrix.GetElement(0,3)
-          y = transformMatrix.GetElement(1,3)
-          z = transformMatrix.GetElement(2,3)          
-          c = (x+y)/z
-          viewUp = [-1,-1,c]
-          self.cameraForNavigation.SetViewUp(viewUp)
+          self.probeToTrackerTransformNode.GetMatrixTransformToParent(transformMatrix)
 
-          self.yellowLogic.SetSliceOffset(x)
-          print self.yellowLogic.GetSliceOffset()
-          self.greenLogic.SetSliceOffset(y)
-          print self.greenLogic.GetSliceOffset()
-          self.redLogic.SetSliceOffset(z)
-          print self.redLogic.GetSliceOffset()
+          if self.probeCalibrationTransform.GetTransformNodeID() == None:
+            self.probeCalibrationTransform.SetAndObserveTransformNodeID(self.centerlineCompensationTransform.GetID())
 
-        '''if trackerNodes.GetNumberOfItems() > 0: 
-            tracker = trackerNodes.GetItemAsObject(0)
-            TransToParent = tracker.GetTransformToParent()
-            Matrix = TransToParent.GetMatrix()
-            print Matrix.GetElement(0,3), Matrix.GetElement(1,3), Matrix.GetElement(2,3)'''
-            
+          self.CheckCurrentPosition(transformMatrix)
 
-      #try: 
-       # self.coordinates = numpy.loadtxt("/home/acorvo/Desktop/Datasets/MatlabCode/NavigationSimulation/CenterlineSensorTracker.txt")
-       # self.RealPosition.setText(self.coordinates)
-      #except IOError:
-       # a = numpy.zeros(3) 
+  def CheckCurrentPosition(self, tMatrix):
 
-      #self.fn = slicer.vtkMRMLAnnotationFiducialNode()
-      #self.fn.SetFiducialWorldCoordinates((0,0,0))
-      #self.fn.SetName('Sensor')   
-      #slicer.mrmlScene.AddNode(self.fn)
-      #self.fn.SetFiducialWorldCoordinates((self.coordinates[0],self.coordinates[1],self.coordinates[2]))
+    fiducialPos = [0,0,0]
+    fiducialsList = []
+    distance = []
 
-      # The sphere indicates the sensor in the 3D View
-      #self.source = vtk.vtkSphereSource()
-      #self.source.SetRadius(2.0)
-      #self.source.SetCenter(self.coordinates[0],self.coordinates[1],self.coordinates[2])
-      #self.source.Update()
-      #slicer.mrmlScene.AddNode(self.track)
-      #self.track.SetAndObservePolyData(self.source.GetOutput())    
-                      
-      #slicer.mrmlScene.AddNode(self.ModelDisplay)
-      #self.track.SetAndObserveDisplayNodeID(self.ModelDisplay.GetID())  
-      #slicer.modules.markups.logic().AddFiducial(self.coordinates[0],self.coordinates[1],self.coordinates[2])
+    if self.fiducialNode == None:
+      fiducialNodesCollection = slicer.mrmlScene.GetNodesByName('CenterlineFiducials_Testing')
+      self.fiducialNode = fiducialNodesCollection.GetItemAsObject(0)
 
-  def CheckCurrentPosition(self, coords):
-    if self.fiducialNode:
-      p = [0,0,0]
-      n = [0,0,0]
+    for i in xrange(self.fiducialNode.GetNumberOfFiducials()):
+      self.fiducialNode.GetNthFiducialPosition(i,fiducialPos)
+      s = [fiducialPos[0],fiducialPos[1],fiducialPos[2]]
+      fiducialsList.append(s)
+
+    originalCoord = [0,0,0]
+    originalCoord[0] = tMatrix.GetElement(0,3)
+    originalCoord[1] = tMatrix.GetElement(1,3)
+    originalCoord[2] = tMatrix.GetElement(2,3)  
+
+    originalCoord = numpy.asarray(originalCoord)
+
+    distance = ((fiducialsList-originalCoord)**2).sum(axis=1)
+    ndx = distance.argsort()
+    closestPoint = fiducialsList[ndx[0]]
+
+    tMatrix.SetElement(0,3,closestPoint[0])
+    tMatrix.SetElement(1,3,closestPoint[1])
+    tMatrix.SetElement(2,3,closestPoint[2])
+
+    ##### Continuosly update ViewUp of the camera so it's always on the orthogonal direction to the locator's long axis #########
+
+    x = closestPoint[0]
+    y = closestPoint[1]
+    z = closestPoint[2]          
+    c = (x+y)/z
+    viewUp = [-1,-1,c]
+    self.cameraForNavigation.SetViewUp(viewUp)
+
+    self.yellowLogic.SetSliceOffset(x)
+    self.greenLogic.SetSliceOffset(y)
+    self.redLogic.SetSliceOffset(z)
+
+    self.centerlineCompensationTransform.SetMatrixTransformToParent(tMatrix)
+    '''if self.fiducialNode:
+      fiducialCoord = [0,0,0]
+      checkedCoord = [0,0,0]
       closest = 0
       i = 0
-      f = [0,0,0]
       pos = 0      
-      focalPointFound = 0
-      count = 0
-      prevFocPoint = [0,0,0]
-      prevAngle = 0
+
       while i < self.fiducialNode.GetNumberOfFiducials() and not(closest):
-        self.fiducialNode.GetNthFiducialPosition(i,p)   
-        if (abs(p[2]-coords[2]) < 1.5 and abs(p[0]-coords[0]) < 2 and abs(p[1]-coords[1]) < 3.5 ):
+        self.fiducialNode.GetNthFiducialPosition(i,fiducialCoord)
+ 
+        if (abs(fiducialCoord[2]-originalCoord[2]) < 5 and abs(fiducialCoord[0]-originalCoord[0]) < 10 and abs(fiducialCoord[1]-originalCoord[1]) < 10 ):
           for offset in range(1,20):
-            self.fiducialNode.GetNthFiducialPosition(i+offset,n)
-            if( abs(n[0]-coords[0]) <= abs(p[0]-coords[0]) and 
-                abs(n[2]-coords[2]) <= abs(p[2]-coords[2]) and 
-                abs(n[1]-coords[1]) < 2 ): 
-              p[0] = n[0]
-              p[1] = n[1]
-              p[2] = n[2]
+            self.fiducialNode.GetNthFiducialPosition(i+offset,checkedCoord)
+            if( abs(checkedCoord[0]-originalCoord[0]) <= abs(fiducialCoord[0]-originalCoord[0]) and 
+                abs(checkedCoord[2]-originalCoord[2]) <= abs(fiducialCoord[2]-originalCoord[2]) and 
+                abs(checkedCoord[1]-originalCoord[1]) < 2 ): 
+              fiducialCoord[0] = checkedCoord[0]
+              fiducialCoord[1] = checkedCoord[1]
+              fiducialCoord[2] = checkedCoord[2]
 
               pos=i+offset
              
           closest = 1
+
           if pos == 0:
             pos = i
 
-          self.coordinates[0] = p[0]
-          self.coordinates[1] = p[1]
-          self.coordinates[2] = p[2]
-          if pos == 319:
-            print self.coordinates
-          if self.coordinates[0] == -30.339359283447266:
-            print pos
-            print "closest fiducial: ", self.coordinates
-        self.focalPoint = [0,0,0]
-        if pos != 0:
-           if pos > 100:
-             j = -29
-           else:
-             j = 9
-           while j<100 and not(focalPointFound):
-            self.fiducialNode.GetNthFiducialPosition(pos+j,f)
-            if( abs(f[0]-self.coordinates[0])!=0 and
-                abs(f[1]-self.coordinates[1])!=0 and
-                abs(f[2]-self.coordinates[2])!=0 and
-                abs(f[0]-self.coordinates[0])<=5 and 
-                abs(f[1]-self.coordinates[1])<=15 and
-                abs(f[2]-self.coordinates[2])<=100 ):
+          originalCoord[0] = fiducialCoord[0]
+          originalCoord[1] = fiducialCoord[1]
+          originalCoord[2] = fiducialCoord[2]
 
-              self.focalPoint[0] = (f[0]+self.coordinates[0])/2
-              self.focalPoint[1] = (f[1]+self.coordinates[1])/2
-              self.focalPoint[2] = (f[2]+self.coordinates[2])/2
+        i += 1  
 
-              #print pos
-              #print self.coordinates
-              #print f
+      tMatrix.SetElement(0,3,originalCoord[0])
+      tMatrix.SetElement(1,3,originalCoord[1])
+      tMatrix.SetElement(2,3,originalCoord[2]) 
 
-              if count == 0:
-	        prevFocPoint[0] = self.focalPoint[0]
-	        prevFocPoint[1] = self.focalPoint[1]
-	        prevFocPoint[2] = self.focalPoint[2]
-                focalPointFound = 0
-              else:                              
-	        ROI = [-48.740203857421875, 10.078389167785645, 1691.2109375]	      
-                
-                if( abs(ROI[0]-self.focalPoint[0]) <= abs(ROI[0]-prevFocPoint[0]) and
-                    abs(ROI[2]-self.focalPoint[2]) <= abs(ROI[2]-prevFocPoint[2]) ):
-                  prevFocPoint[0] = self.focalPoint[0]
-	          prevFocPoint[1] = self.focalPoint[1]
-	          prevFocPoint[2] = self.focalPoint[2]                  
-                elif( abs(ROI[0]-self.focalPoint[0]) > abs(ROI[0]-prevFocPoint[0]) and
-                      abs(ROI[2]-self.focalPoint[2]) <= abs(ROI[2]-prevFocPoint[2]) ):
-                  prevFocPoint[0] = self.focalPoint[0]
-	          prevFocPoint[1] = self.focalPoint[1]
-	          prevFocPoint[2] = self.focalPoint[2]                 
-                else:                                          
-                  self.focalPoint[0] = prevFocPoint[0]
-                  self.focalPoint[1] = prevFocPoint[1]
-                  self.focalPoint[2] = prevFocPoint[2]
-
-                if( count == 15 ):
-                  focalPointFound = 1
-
-              count += 1    
-
-            j += 1
-                    
-        i += 1
-
-      prova = self.cameraNode.GetCamera()
-      prova.SetPosition(*self.coordinates)
-      prova.SetFocalPoint(*self.focalPoint) 
-      prevAngle = prova.GetOrientationWXYZ()[0]
+      self.transformNode.SetMatrixTransformToParent(tMatrix)'''
 
   def RealPositionValueChanged(self):
     """ Apply the fth step in the path to the global camera"""
