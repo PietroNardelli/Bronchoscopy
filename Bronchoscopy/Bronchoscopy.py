@@ -49,7 +49,7 @@ class BronchoscopyWidget:
 
     self.timer = qt.QTimer()
     self.timer.setInterval(20)
-    self.timer.connect('timeout()', self.flyToNext)
+    #self.timer.connect('timeout()', self.flyToNext)
 
     #
     # Sensor Tracking Variables
@@ -128,8 +128,8 @@ class BronchoscopyWidget:
       inputVolume = self.inputSelector.currentNode()
       modelDisplayNode = inputVolume.GetDisplayNode()
       modelDisplayNode.SetColor(1.0, 0.8, 0.7)
-      modelDisplayNode.SetFrontfaceCulling(0)
-      modelDisplayNode.SetBackfaceCulling(1)
+      modelDisplayNode.SetFrontfaceCulling(1)
+      modelDisplayNode.SetBackfaceCulling(0)
 
     #
     # Label Selector
@@ -146,30 +146,14 @@ class BronchoscopyWidget:
     self.labelSelector.setMRMLScene( slicer.mrmlScene )
     self.labelSelector.setToolTip( "Pick the 3D input model to the algorithm." )
     IOFormLayout.addRow("Airway Label: ", self.labelSelector)
-
-    #
-    # Fiducial Selector
-    #
-
-    self.fiducialsListSelector = slicer.qMRMLNodeComboBox()
-    self.fiducialsListSelector.nodeTypes = ( ("vtkMRMLMarkupsFiducialNode"), "" )
-    self.fiducialsListSelector.selectNodeUponCreation = False
-    self.fiducialsListSelector.addEnabled = True
-    self.fiducialsListSelector.removeEnabled = True
-    self.fiducialsListSelector.noneEnabled = False
-    self.fiducialsListSelector.showHidden = False
-    self.fiducialsListSelector.showChildNodeTypes = False
-    self.fiducialsListSelector.setMRMLScene( slicer.mrmlScene )
-    self.fiducialsListSelector.setToolTip( "Place a source and a target point within the 3D model." )
-    IOFormLayout.addRow("Source and Target seeds: ", self.fiducialsListSelector)
-    
+ 
     #
     # Create Path Button
     #
     self.CreatePathButton = qt.QPushButton("Create Path")
     self.CreatePathButton.toolTip = "Run the algorithm to create path between fiducials."
     self.CreatePathButton.setFixedSize(200,50)
-    if( self.inputSelector.currentNode() and self.fiducialsListSelector.currentNode()):
+    if self.inputSelector.currentNode() and self.labelSelector.currentNode():
         self.CreatePathButton.enabled = True
     else:
         self.CreatePathButton.enabled = False
@@ -255,25 +239,18 @@ class BronchoscopyWidget:
     # 'Track Sensor' Collapsible Button 
     #
     trackerCollapsibleButton = ctk.ctkCollapsibleButton()
-    trackerCollapsibleButton.text = "Sensor Tracking"
+    trackerCollapsibleButton.text = "Probe Tracking"
     self.layout.addWidget(trackerCollapsibleButton)
     self.layout.setSpacing(20)
     trackerFormLayout = qt.QFormLayout(trackerCollapsibleButton)
-
-    #
-    # Text Output Label for Sensor Tracking Position 
-    #
-    self.RealPosition = qt.QLineEdit()
-    self.RealPosition.setReadOnly(False)
-    self.RealPosition.textChanged.connect(self.RealPositionValueChanged)
-    trackerFormLayout.addRow("Sensor Position", self.RealPosition)
 
     #
     # Matlab Track Button
     #
     self.MatlabTrackButton = qt.QPushButton("Track Sensor")
     self.MatlabTrackButton.toolTip = "Take Sensor output."
-    self.MatlabTrackButton.setFixedSize(300,40)
+    #self.MatlabTrackButton.setFixedSize(300,40)
+    self.MatlabTrackButton.setFixedHeight(40)
     self.MatlabTrackButton.checkable = True
     if( self.inputSelector.currentNode() ):
         self.MatlabTrackButton.enabled = True
@@ -288,7 +265,6 @@ class BronchoscopyWidget:
     self.CreatePathButton.connect('clicked(bool)', self.onCreatePathButton)
     self.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.labelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
-    self.fiducialsListSelector.connect("currentNodeChanged(vtkMRMLNode*)",self.onSelect)
     self.NavigationButton.connect('toggled(bool)', self.onNavigationButtonToggled)
     self.virtualCameraNodeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.setCameraNode)
     self.MatlabTrackButton.connect('toggled(bool)', self.onMatlabTrackButtonToggled)
@@ -317,7 +293,7 @@ class BronchoscopyWidget:
     secondThreeDView.lookFromViewAxis(ctk.ctkAxesWidget().Anterior)
 
   def onSelect(self):
-    if( self.inputSelector.currentNode() and self.labelSelector.currentNode() and self.fiducialsListSelector.currentNode() ):
+    if self.inputSelector.currentNode() and self.labelSelector.currentNode():
       self.CreatePathButton.enabled = True
     else:
       self.CreatePathButton.enabled = False
@@ -380,7 +356,7 @@ class BronchoscopyWidget:
     self.flythroughCollapsibleButton.enabled = False
     self.NavigationButton.enabled = False
     self.MatlabTrackButton.enabled = False
-    self.createPath(self.labelSelector.currentNode()) #, self.fiducialsListSelector.currentNode())
+    self.createPath(self.labelSelector.currentNode()) 
     self.CreatePathButton.enabled = True
     self.MatlabTrackButton.enabled = True
     self.updateGUI()
@@ -584,9 +560,9 @@ class BronchoscopyWidget:
     #self.transform = model.transform
     #self.path = result.path
     
-      #
-      # Enable/Disable Flythrough Button
-      #
+    #
+    # Enable/Disable Flythrough Button
+    #
     self.flythroughCollapsibleButton.enabled = True #len(result.path) > 0
     self.NavigationButton.enabled = True #len(result.path) > 0
     self.MatlabTrackButton.enabled = True
@@ -613,16 +589,106 @@ class BronchoscopyWidget:
     NthFiducial = 0
     point = [0,0,0]
 
-    centerlineModelNode.GetPoint(i,point)
-    fiducialList.AddFiducial(point[0],point[1],point[2])
-    fiducialList.SetNthMarkupVisibility(NthFiducial,0)
-    NthFiducial += 1
+    for i in range(0, NoP):
+      centerlineModelNode.GetPoint(i,point)
+      fiducialList.AddFiducial(point[0],point[1],point[2])
+      fiducialList.SetNthMarkupVisibility(NthFiducial,0)
+      NthFiducial += 1
 
   def Smoothing(self, pathModel, iterationsNumber):
     
     NumberOfCells = pathModel.GetNumberOfCells()
 
-    for i in range(NumberOfCells-50,8,-8):
+    pointsList = []
+    distancePointsAbove = []
+    distancePointsBelow = []
+
+    for i in range(NumberOfCells-10,10,-10):
+      cell = pathModel.GetCell(i)
+      points = cell.GetPoints()
+      if points.GetNumberOfPoints() % 2 == 0:
+        centralPointPosition = points.GetNumberOfPoints()/2
+      else:
+        centralPointPosition = int(points.GetNumberOfPoints())/2
+
+      centralPoint = [0,0,0]
+      points.GetPoint(centralPointPosition,centralPoint)
+     
+      p = [centralPoint[0],centralPoint[1],centralPoint[2]]
+      pointsList.append(p)
+
+    for n in range(1,len(pointsList)-1):
+      actualPoint = pointsList[n]
+      actualPoint = numpy.asarray(actualPoint)
+      #
+      # closest point above
+      #
+      pointsAbove = pointsList[:n]
+      distancePointsAbove = ((pointsAbove-actualPoint)**2).sum(axis=1)
+      ndxAbove = distancePointsAbove.argsort()
+      prevPoint =  pointsAbove[ndxAbove[0]]
+
+      # 
+      # closest point below
+      #
+      k = n+1
+      pointsBelow = pointsList[k:]
+      distancePointsBelow = ((pointsBelow-actualPoint)**2).sum(axis=1)
+      ndxBelow = distancePointsBelow.argsort()
+      nextPoint = pointsBelow[ndxBelow[0]]      
+
+      actualPoint = actualPoint.tolist()
+
+      relaxation = 0.5
+
+      actualPoint[0] += relaxation * (0.5 * (prevPoint[0] + nextPoint[0]) - actualPoint[0]);
+      actualPoint[1] += relaxation * (0.5 * (prevPoint[1] + nextPoint[1]) - actualPoint[1]);
+      actualPoint[2] += relaxation * (0.5 * (prevPoint[2] + nextPoint[2]) - actualPoint[2]);
+
+      self.points.InsertNextPoint(actualPoint)
+
+    if iterationsNumber > 1:
+
+      point = [0,0,0]
+      pointsList = []
+
+      for i in range(0,self.points.GetNumberOfPoints()):
+        self.points.GetPoint(i,point)
+        p = [point[0],point[1],point[2]]
+        pointsList.append(p)
+
+      for iterations in xrange(1,iterationsNumber):
+        for n in xrange(1,len(pointsList)-1):
+          actualPoint = pointsList[n]
+          actualPoint = numpy.asarray(actualPoint)          
+
+          #
+          # closest point above
+          #
+          pointsAbove = pointsList[:n]
+          distancePointsAbove = ((pointsAbove-actualPoint)**2).sum(axis=1)
+          ndxAbove = distancePointsAbove.argsort()
+          prevPoint =  pointsAbove[ndxAbove[0]]
+          # 
+          # closest point below
+          #
+          k = n+1
+          pointsBelow = pointsList[k:]
+          distancePointsBelow = ((pointsBelow-actualPoint)**2).sum(axis=1)
+          ndxBelow = distancePointsBelow.argsort()
+          nextPoint = pointsBelow[ndxBelow[0]]      
+
+          actualPoint = actualPoint.tolist()
+
+          relaxation = 0.5
+
+          actualPoint[0] += relaxation * (0.5 * (prevPoint[0] + nextPoint[0]) - actualPoint[0]);
+          actualPoint[1] += relaxation * (0.5 * (prevPoint[1] + nextPoint[1]) - actualPoint[1]);
+          actualPoint[2] += relaxation * (0.5 * (prevPoint[2] + nextPoint[2]) - actualPoint[2]);
+
+          self.points.InsertPoint(n, actualPoint)
+
+    '''for i in range(NumberOfCells-50,8,-8):
       cell0 = pathModel.GetCell(i+8)
 
       points0 = cell0.GetPoints()
@@ -770,7 +836,7 @@ class BronchoscopyWidget:
                 point1[1] += relaxation * (0.5 * (point0[1] + point2[1]) - point1[1]);
                 point1[2] += relaxation * (0.5 * (point0[2] + point2[2]) - point1[2]);
 
-          self.points.SetPoint(z, *point1)
+          self.points.SetPoint(z, *point1)'''
 
   #for (int i=0; i<numberOfIterations; i++)
   #  {
@@ -876,8 +942,8 @@ class BronchoscopyWidget:
    
   def frameSliderValueChanged(self, newValue):
     #print "frameSliderValueChanged:", newValue
-    self.flyTo(newValue)
-    
+    #self.flyTo(newValue)  
+    print "hihi"
   def frameSkipSliderValueChanged(self, newValue):
     #print "frameSkipSliderValueChanged:", newValue
     self.skip = int(newValue)
