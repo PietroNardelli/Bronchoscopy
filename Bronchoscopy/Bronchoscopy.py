@@ -434,7 +434,7 @@ class BronchoscopyWidget:
     #self.centerline.addAttribute( "vtkMRMLScalarVolumeNode", "LabelMap", 1 )
     slicer.mrmlScene.AddNode( self.centerline )
 
-    centerlineExtraction = slicer.modules.thinning
+    centerlineExtraction = slicer.modules.centerlineextractioncli
     parameters = {
         "inputVolume": labelVolume.GetID(),
         "outputVolume": self.centerline.GetID(),	  
@@ -473,7 +473,7 @@ class BronchoscopyWidget:
     self.polydata = self.centerlineModel.GetPolyData()
     self.points = vtk.vtkPoints()
 
-    iterations = 10
+    iterations = 3
     self.Smoothing(self.polydata, iterations)
     self.CreateFiducialPath(self.points, self.fiducialNode)
 
@@ -603,240 +603,129 @@ class BronchoscopyWidget:
     distancePointsAbove = []
     distancePointsBelow = []
 
-    for i in range(NumberOfCells-10,10,-10):
-      cell = pathModel.GetCell(i)
-      points = cell.GetPoints()
-      if points.GetNumberOfPoints() % 2 == 0:
-        centralPointPosition = points.GetNumberOfPoints()/2
-      else:
-        centralPointPosition = int(points.GetNumberOfPoints())/2
+    for iteration in range(0, iterationsNumber):
+      if iteration == 0:
+        centralPoint = [0,0,0]
+        for i in range(NumberOfCells-10,10,-10):
+          cell = pathModel.GetCell(i)
+          points = cell.GetPoints()
+          if points.GetNumberOfPoints() % 2 == 0:
+            centralPointPosition = points.GetNumberOfPoints()/2
+          else:
+            centralPointPosition = int(points.GetNumberOfPoints())/2
 
-      centralPoint = [0,0,0]
-      points.GetPoint(centralPointPosition,centralPoint)
+          points.GetPoint(centralPointPosition,centralPoint)
      
-      p = [centralPoint[0],centralPoint[1],centralPoint[2]]
-      pointsList.append(p)
+          p = [centralPoint[0],centralPoint[1],centralPoint[2]]
+          pointsList.append(p)
+      else:
+        point = [0,0,0]
+        pointsList = []
+        for i in range(0,self.points.GetNumberOfPoints()):
+          self.points.GetPoint(i,point)
+          p = [point[0],point[1],point[2]]
+          pointsList.append(p) 
 
-    for n in range(1,len(pointsList)-1):
-      actualPoint = pointsList[n]
-      actualPoint = numpy.asarray(actualPoint)
-      #
-      # closest point above
-      #
-      pointsAbove = pointsList[:n]
-      distancePointsAbove = ((pointsAbove-actualPoint)**2).sum(axis=1)
-      ndxAbove = distancePointsAbove.argsort()
-      prevPoint =  pointsAbove[ndxAbove[0]]
+      for n in range(1,len(pointsList)-1):
+        actualPoint = pointsList[n]
+        actualPoint = numpy.asarray(actualPoint)
 
-      # 
-      # closest point below
-      #
-      k = n+1
-      pointsBelow = pointsList[k:]
-      distancePointsBelow = ((pointsBelow-actualPoint)**2).sum(axis=1)
-      ndxBelow = distancePointsBelow.argsort()
-      nextPoint = pointsBelow[ndxBelow[0]]      
+        #
+        # closest above point 
+        #
+        pointsAbove = pointsList[:n]
+        followingPointsList = pointsList[n+1:n+200]
+        pointsAbove = pointsAbove + followingPointsList
+        distancePointsAbove = ((pointsAbove-actualPoint)**2).sum(axis=1)
+        ndxAbove = distancePointsAbove.argsort()
+        prevPoint =  pointsAbove[ndxAbove[0]]
 
-      actualPoint = actualPoint.tolist()
+        applySmooth = 1
 
-      relaxation = 0.5
+        prevFound = 0
+        count = 1
+        if abs(actualPoint[0]-prevPoint[0]) > 3 and abs(actualPoint[1]-prevPoint[1]) > 2:
+          if abs(actualPoint[2]-prevPoint[2]) > 4:      
+            while abs(actualPoint[0]-prevPoint[0]) > 3 and abs(actualPoint[1]-prevPoint[1]) > 2 and abs(actualPoint[2]-prevPoint[2]) > 4 and count < len(ndxAbove) and prevFound == 0:
+              prevPoint = pointsAbove[ndxAbove[count]]
+              if abs(actualPoint[0]-prevPoint[0]) <= 3 and abs(actualPoint[1]-prevPoint[1]) <= 2 and abs(actualPoint[2]-prevPoint[2]) <= 4:
+                 prevFound = 1
+              count += 1
+          else:
+             while abs(actualPoint[0]-prevPoint[0]) > 3 and abs(actualPoint[1]-prevPoint[1]) > 2 and count < len(ndxAbove) and prevFound == 0:
+               prevPoint = pointsAbove[ndxAbove[count]]
+               if abs(actualPoint[0]-prevPoint[0]) <= 3 and abs(actualPoint[1]-prevPoint[1]) <= 2 and abs(actualPoint[2]-prevPoint[2]) <= 4:
+                 prevFound = 1
+               count += 1
+        elif abs(actualPoint[0]-prevPoint[0]) > 3 or abs(actualPoint[1]-prevPoint[1]) > 2:
+          if abs(actualPoint[0]-prevPoint[0]) > 3:
+            while abs(actualPoint[0]-prevPoint[0]) > 3 and count < len(ndxAbove) and prevFound == 0:
+              prevPoint = pointsAbove[ndxAbove[count]]
+              if abs(actualPoint[0]-prevPoint[0]) <= 3 and abs(actualPoint[1]-prevPoint[1]) <= 2 and abs(actualPoint[2]-prevPoint[2]) <= 4:
+                 prevFound = 1
+              count += 1
+          elif abs(actualPoint[1]-prevPoint[1]) > 2:
+            while abs(actualPoint[0]-prevPoint[0]) > 2 and count < len(ndxAbove) and prevFound == 0:
+              prevPoint = pointsAbove[ndxAbove[count]]
+              if abs(actualPoint[0]-prevPoint[0]) <= 3 and abs(actualPoint[1]-prevPoint[1]) <= 2 and abs(actualPoint[2]-prevPoint[2]) <= 4:
+                 prevFound = 1
+              count += 1
 
-      actualPoint[0] += relaxation * (0.5 * (prevPoint[0] + nextPoint[0]) - actualPoint[0]);
-      actualPoint[1] += relaxation * (0.5 * (prevPoint[1] + nextPoint[1]) - actualPoint[1]);
-      actualPoint[2] += relaxation * (0.5 * (prevPoint[2] + nextPoint[2]) - actualPoint[2]);
+        # 
+        # closest below point
+        #
+        k = n+1
+        pointsBelow = pointsList[k:]
+        distancePointsBelow = ((pointsBelow-actualPoint)**2).sum(axis=1)
+        ndxBelow = distancePointsBelow.argsort()
+        nextPoint = pointsBelow[ndxBelow[0]]      
 
-      self.points.InsertNextPoint(actualPoint)
+        count = 1
+        nextFound = 0
 
-    if iterationsNumber > 1:
+        if abs(actualPoint[0]-nextPoint[0]) > 3 and abs(actualPoint[1]-nextPoint[1]) > 2:
+          if abs(actualPoint[2]-nextPoint[2]) > 4:
+	    while abs(actualPoint[0]-nextPoint[0]) > 3 and abs(actualPoint[1]-nextPoint[1]) > 2 and abs(actualPoint[2]-nextPoint[2]) > 4 and count < len(ndxBelow) and nextFound == 0:
+              nextPoint = pointsBelow[ndxBelow[count]]
+              if abs(actualPoint[0]-nextPoint[0]) <= 3 and abs(actualPoint[1]-nextPoint[1]) <= 2 and abs(actualPoint[2]-nextPoint[2]) <= 4:
+                 nextFound = 1
+              count += 1
+          else:
+             while abs(actualPoint[0]-nextPoint[0]) > 3 and abs(actualPoint[1]-nextPoint[1]) > 2 and count < len(ndxBelow) and nextFound == 0:
+               nextPoint = pointsBelow[ndxBelow[count]]
+               if abs(actualPoint[0]-nextPoint[0]) <= 3 and abs(actualPoint[1]-nextPoint[1]) <= 2 and abs(actualPoint[2]-nextPoint[2]) <= 4:
+                 nextFound = 1
+               count += 1
+        elif abs(actualPoint[0]-nextPoint[0]) > 3 or abs(actualPoint[1]-nextPoint[1]) > 2:
+          if abs(actualPoint[0]-nextPoint[0]) > 3:
+            while abs(actualPoint[0]-nextPoint[0]) > 3 and count < len(ndxBelow) and nextFound == 0:
+              nextPoint = pointsBelow[ndxBelow[count]]
+              if abs(actualPoint[0]-nextPoint[0]) <= 3 and abs(actualPoint[1]-nextPoint[1]) <= 2 and abs(actualPoint[2]-nextPoint[2]) <= 4:
+                 nextFound = 1
+              count += 1
+          elif abs(actualPoint[1]-nextPoint[1]) > 2:
+            while abs(actualPoint[0]-nextPoint[0]) > 2 and count < len(ndxBelow) and nextFound == 0:
+              nextPoint = pointsBelow[ndxBelow[count]]
+              if abs(actualPoint[0]-nextPoint[0]) <= 3 and abs(actualPoint[1]-nextPoint[1]) <= 2 and abs(actualPoint[2]-nextPoint[2]) <= 4:
+                 nextFound = 1
+              count += 1
+ 
+        if nextFound == 0 or prevFound == 0:
+          applySmooth = 0
 
-      point = [0,0,0]
-      pointsList = []
+        actualPoint = actualPoint.tolist()
 
-      for i in range(0,self.points.GetNumberOfPoints()):
-        self.points.GetPoint(i,point)
-        p = [point[0],point[1],point[2]]
-        pointsList.append(p)
+        relaxation = 0.5
 
-      for iterations in xrange(1,iterationsNumber):
-        for n in xrange(1,len(pointsList)-1):
-          actualPoint = pointsList[n]
-          actualPoint = numpy.asarray(actualPoint)          
-
-          #
-          # closest point above
-          #
-          pointsAbove = pointsList[:n]
-          distancePointsAbove = ((pointsAbove-actualPoint)**2).sum(axis=1)
-          ndxAbove = distancePointsAbove.argsort()
-          prevPoint =  pointsAbove[ndxAbove[0]]
-          # 
-          # closest point below
-          #
-          k = n+1
-          pointsBelow = pointsList[k:]
-          distancePointsBelow = ((pointsBelow-actualPoint)**2).sum(axis=1)
-          ndxBelow = distancePointsBelow.argsort()
-          nextPoint = pointsBelow[ndxBelow[0]]      
-
-          actualPoint = actualPoint.tolist()
-
-          relaxation = 0.5
-
+        if applySmooth == 1:
           actualPoint[0] += relaxation * (0.5 * (prevPoint[0] + nextPoint[0]) - actualPoint[0]);
           actualPoint[1] += relaxation * (0.5 * (prevPoint[1] + nextPoint[1]) - actualPoint[1]);
           actualPoint[2] += relaxation * (0.5 * (prevPoint[2] + nextPoint[2]) - actualPoint[2]);
 
-          self.points.InsertPoint(n, actualPoint)
-
-    '''for i in range(NumberOfCells-50,8,-8):
-      cell0 = pathModel.GetCell(i+8)
-
-      points0 = cell0.GetPoints()
-
-      if( points0.GetNumberOfPoints() % 2 == 0 ):
-        pos0 = points0.GetNumberOfPoints()/2
-      else:
-   	pos0 = int(points0.GetNumberOfPoints())/2
-      point0 = [0,0,0]        
-      points0.GetPoint(pos0,point0)
-
-      cell1 = pathModel.GetCell(i)
-      points1 = cell1.GetPoints()
-
-      if( points1.GetNumberOfPoints() % 2 == 0 ):
-        pos1 = points1.GetNumberOfPoints()/2
-      else:
-   	pos1 = int(points1.GetNumberOfPoints())/2
-
-      point1 = [0,0,0]
-      points1.GetPoint(pos1,point1)
-
-      cell2 = pathModel.GetCell(i-8)
-      points2 = cell2.GetPoints()
-
-      if( points2.GetNumberOfPoints() % 2 == 0 ):
-        pos2 = points2.GetNumberOfPoints()/2
-      else:
-   	pos2 = int(points2.GetNumberOfPoints())/2
-
-      point2 = [0,0,0] 
-      points2.GetPoint(pos2,point2)
-
-      relaxation = 0.5
-
-      if( i > NumberOfCells - 50 ):
-        if( abs(point1[0]-point0[0])<=3 and abs(point1[0]-point2[0])<=3):
-          point1[0] += relaxation * (0.5 * (point0[0] + point2[0]) - point1[0]);
-          point1[1] += relaxation * (0.5 * (point0[1] + point2[1]) - point1[1]);
-          point1[2] += relaxation * (0.5 * (point0[2] + point2[2]) - point1[2]);
-      else:
-        if( abs(point1[0]-point0[0])<=3 and abs(point1[0]-point2[0])<=3 and
-            abs(point1[1]-point0[1])<=2 and abs(point1[1]-point2[1])<=2 ):
-          point1[0] += relaxation * (0.5 * (point0[0] + point2[0]) - point1[0]);
-          point1[1] += relaxation * (0.5 * (point0[1] + point2[1]) - point1[1]);
-          point1[2] += relaxation * (0.5 * (point0[2] + point2[2]) - point1[2]);
-
-      self.points.InsertNextPoint(*point1)
-  
-    if( iterationsNumber > 1 ):
-      point0 = [0,0,0]
-      point1 = [0,0,0]
-      point2 = [0,0,0]
-      for iterations in xrange(1,iterationsNumber):
-        for z in xrange(1,self.points.GetNumberOfPoints()-1,1):
-          self.points.GetPoint(z-1,point0)
-          self.points.GetPoint(z,point1)
-          self.points.GetPoint(z+1,point2)
- 
-          if( z < 100 ): #to be modified
-            if( abs(point1[0]-point0[0])<=3 and abs(point1[0]-point2[0])<=3):
-              point1[0] += relaxation * (0.5 * (point0[0] + point2[0]) - point1[0]);
-              point1[1] += relaxation * (0.5 * (point0[1] + point2[1]) - point1[1]);
-              point1[2] += relaxation * (0.5 * (point0[2] + point2[2]) - point1[2]);
-          else:   
-            if( abs(point1[0]-point0[0])<=3 and abs(point1[0]-point2[0])<=3 and 
-                abs(point1[1]-point0[1])<=2 and abs(point1[1]-point2[1])<=2 ):
-              point1[0] += relaxation * (0.5 * (point0[0] + point2[0]) - point1[0]);
-              point1[1] += relaxation * (0.5 * (point0[1] + point2[1]) - point1[1]);
-              point1[2] += relaxation * (0.5 * (point0[2] + point2[2]) - point1[2]);
-
-            elif(abs(point1[0]-point0[0])>3 or abs(point1[0]-point2[0])>3 and 
-                 abs(point1[1]-point0[1])>2 or abs(point1[1]-point2[1])>2 ):
-	      FoundPrev = 0
-              FoundNext = 0
-	      newPoint0 = [0,0,0]
-	      newPoint2 = [0,0,0]       
-              if(z > 15):
-                n = z-1
-                prev = 1
-	        while( prev < 15 and not(FoundPrev) ):
-                  m = n-prev
-                  self.points.GetPoint(m,point0)
-		  prev = prev+1
-		  if( abs(point1[0]-point0[0])<=3 and 
-                      abs(point1[1]-point0[1])<=2 and 
-                      abs(point1[2]-point0[2])<=100 ):
-		    FoundPrev = 1
-		    newPoint0[0] = point0[0]
-		    newPoint0[1] = point0[1]
-		    newPoint0[2] = point0[2]
-	            
-                if(self.points.GetNumberOfPoints()-z > 15):
-                  k = z+1
-                  next = 1
-	          while(next < 15 and not(FoundNext)):
-                    j = k+next
-                    self.points.GetPoint(j,point2)
-		    next = next+1
-                    if( abs(point1[0]-point2[0])<=3 and 
-                        abs(point1[1]-point2[1])<=2 and
-                        abs(point1[2]-point2[2])<=100 ):
-		      FoundNext = 1
-		      newPoint2[0] = point2[0]
-		      newPoint2[1] = point2[1]
-		      newPoint2[2] = point2[2]
-
-	
-              if(FoundPrev and FoundNext):
-	        point1[0] += relaxation * (0.5 * (newPoint0[0] + newPoint2[0]) - point1[0]);
-                point1[1] += relaxation * (0.5 * (newPoint0[1] + newPoint2[1]) - point1[1]);
-                point1[2] += relaxation * (0.5 * (newPoint0[2] + newPoint2[2]) - point1[2]);
-		    
-            elif(abs(point1[0]-point0[0]) > 3 or abs(point1[1]-point0[1]) > 2):
-              FoundPrev = 0
-	      n = z-1
-              if(z > 15):
-                prev = 1
-	        while(prev < 15 and not(FoundPrev)):
-                  m = n-prev
-                  self.points.GetPoint(m,point0)
-	          prev = prev+1
-                  if(abs(point1[0]-point0[0])<=3 and abs(point1[1]-point0[1])<=2):
-		    FoundPrev = 1
-	      
-              if(FoundPrev):
-	        point1[0] += relaxation * (0.5 * (point0[0] + point2[0]) - point1[0]);
-                point1[1] += relaxation * (0.5 * (point0[1] + point2[1]) - point1[1]);
-                point1[2] += relaxation * (0.5 * (point0[2] + point2[2]) - point1[2]);  
-			
-            elif(abs(point1[0]-point2[0]) > 3 or abs(point1[1]-point2[1]) > 2):
-              FoundNext = 0
-	      n = z+1
-              if(self.points.GetNumberOfPoints()-z > 15):
-                next = 1
-	        while(next < 15 and not(FoundNext)):
-                  m = n+next
-                  self.points.GetPoint(m,point2)
-		  next = next+1
-                  if(abs(point1[0]-point2[0])<=3 and abs(point1[1]-point2[1])<=2):
-		    FoundNext = 1
-              
-              if(FoundNext):
-	        point1[0] += relaxation * (0.5 * (point0[0] + point2[0]) - point1[0]);
-                point1[1] += relaxation * (0.5 * (point0[1] + point2[1]) - point1[1]);
-                point1[2] += relaxation * (0.5 * (point0[2] + point2[2]) - point1[2]);
-
-          self.points.SetPoint(z, *point1)'''
+        if iteration == 0:
+          self.points.InsertNextPoint(actualPoint)
+        else:
+          self.points.InsertPoint(n, actualPoint)    
 
   #for (int i=0; i<numberOfIterations; i++)
   #  {
