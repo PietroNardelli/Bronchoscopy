@@ -463,7 +463,7 @@ class BronchoscopyWidget:
     nodeType = 'vtkMRMLMarkupsFiducialNode'
     self.fiducialNode = slicer.mrmlScene.CreateNodeByClass(nodeType)
     self.fiducialNode.SetScene(slicer.mrmlScene)
-    self.fiducialNode.SetName('CenterlineFiducial')
+    self.fiducialNode.SetName('CenterlineFiducials')
     slicer.mrmlScene.AddNode(self.fiducialNode)
 
     modelsCollection = slicer.mrmlScene.GetNodesByClass('vtkMRMLModelNode')
@@ -473,9 +473,9 @@ class BronchoscopyWidget:
     self.polydata = self.centerlineModel.GetPolyData()
     self.points = vtk.vtkPoints()
 
-    iterations = 3
-    self.Smoothing(self.polydata, iterations)
-    self.CreateFiducialPath(self.points, self.fiducialNode)
+    iterations = 5
+    self.Smoothing(self.polydata, self.points, iterations)
+    self.CreateFiducialsCenterline(self.points, self.fiducialNode)
 
     # Create model node
     #model = slicer.vtkMRMLModelNode()
@@ -582,20 +582,20 @@ class BronchoscopyWidget:
     qt.QTimer.singleShot(msec, self.info.close)
     self.info.exec_()
   
-  def CreateFiducialPath(self, centerlineModelNode, fiducialList):
+  def CreateFiducialsCenterline(self, centerlinePoints, fiducialList):
 
-    NoP = centerlineModelNode.GetNumberOfPoints()
+    NoP = centerlinePoints.GetNumberOfPoints()
     
     NthFiducial = 0
     point = [0,0,0]
 
     for i in range(0, NoP):
-      centerlineModelNode.GetPoint(i,point)
+      centerlinePoints.GetPoint(i,point)
       fiducialList.AddFiducial(point[0],point[1],point[2])
       fiducialList.SetNthMarkupVisibility(NthFiducial,0)
       NthFiducial += 1
 
-  def Smoothing(self, pathModel, iterationsNumber):
+  def Smoothing(self, pathModel, modelPoints, iterationsNumber):
     
     NumberOfCells = pathModel.GetNumberOfCells()
 
@@ -618,15 +618,18 @@ class BronchoscopyWidget:
      
           p = [centralPoint[0],centralPoint[1],centralPoint[2]]
           pointsList.append(p)
+          if i == NumberOfCells-10:
+            modelPoints.InsertPoint(0, p)
       else:
         point = [0,0,0]
         pointsList = []
-        for i in range(0,self.points.GetNumberOfPoints()):
-          self.points.GetPoint(i,point)
+        for i in range(0,modelPoints.GetNumberOfPoints()):
+          modelPoints.GetPoint(i,point)
           p = [point[0],point[1],point[2]]
           pointsList.append(p) 
 
       for n in range(1,len(pointsList)-1):
+        
         actualPoint = pointsList[n]
         actualPoint = numpy.asarray(actualPoint)
 
@@ -642,10 +645,11 @@ class BronchoscopyWidget:
 
         applySmooth = 1
 
-        prevFound = 0
+        prevFound = 1
         count = 1
         if abs(actualPoint[0]-prevPoint[0]) > 3 and abs(actualPoint[1]-prevPoint[1]) > 2:
-          if abs(actualPoint[2]-prevPoint[2]) > 4:      
+          prevFound = 0 
+          if abs(actualPoint[2]-prevPoint[2]) > 4:     
             while abs(actualPoint[0]-prevPoint[0]) > 3 and abs(actualPoint[1]-prevPoint[1]) > 2 and abs(actualPoint[2]-prevPoint[2]) > 4 and count < len(ndxAbove) and prevFound == 0:
               prevPoint = pointsAbove[ndxAbove[count]]
               if abs(actualPoint[0]-prevPoint[0]) <= 3 and abs(actualPoint[1]-prevPoint[1]) <= 2 and abs(actualPoint[2]-prevPoint[2]) <= 4:
@@ -658,6 +662,7 @@ class BronchoscopyWidget:
                  prevFound = 1
                count += 1
         elif abs(actualPoint[0]-prevPoint[0]) > 3 or abs(actualPoint[1]-prevPoint[1]) > 2:
+          prevFound = 0 
           if abs(actualPoint[0]-prevPoint[0]) > 3:
             while abs(actualPoint[0]-prevPoint[0]) > 3 and count < len(ndxAbove) and prevFound == 0:
               prevPoint = pointsAbove[ndxAbove[count]]
@@ -681,9 +686,10 @@ class BronchoscopyWidget:
         nextPoint = pointsBelow[ndxBelow[0]]      
 
         count = 1
-        nextFound = 0
+        nextFound = 1
 
         if abs(actualPoint[0]-nextPoint[0]) > 3 and abs(actualPoint[1]-nextPoint[1]) > 2:
+          nextFound = 0
           if abs(actualPoint[2]-nextPoint[2]) > 4:
 	    while abs(actualPoint[0]-nextPoint[0]) > 3 and abs(actualPoint[1]-nextPoint[1]) > 2 and abs(actualPoint[2]-nextPoint[2]) > 4 and count < len(ndxBelow) and nextFound == 0:
               nextPoint = pointsBelow[ndxBelow[count]]
@@ -697,6 +703,7 @@ class BronchoscopyWidget:
                  nextFound = 1
                count += 1
         elif abs(actualPoint[0]-nextPoint[0]) > 3 or abs(actualPoint[1]-nextPoint[1]) > 2:
+          nextFound = 0
           if abs(actualPoint[0]-nextPoint[0]) > 3:
             while abs(actualPoint[0]-nextPoint[0]) > 3 and count < len(ndxBelow) and nextFound == 0:
               nextPoint = pointsBelow[ndxBelow[count]]
@@ -716,16 +723,22 @@ class BronchoscopyWidget:
         actualPoint = actualPoint.tolist()
 
         relaxation = 0.5
-
+        
         if applySmooth == 1:
+          if n == 97:
+            print "before: ", actualPoint
+            print "prevPoint: ", prevPoint
+            print "nextPoint: ", nextPoint
           actualPoint[0] += relaxation * (0.5 * (prevPoint[0] + nextPoint[0]) - actualPoint[0]);
           actualPoint[1] += relaxation * (0.5 * (prevPoint[1] + nextPoint[1]) - actualPoint[1]);
           actualPoint[2] += relaxation * (0.5 * (prevPoint[2] + nextPoint[2]) - actualPoint[2]);
+          if n == 97:
+            print "after: ", actualPoint 
 
         if iteration == 0:
-          self.points.InsertNextPoint(actualPoint)
+          modelPoints.InsertNextPoint(actualPoint)
         else:
-          self.points.InsertPoint(n, actualPoint)    
+          modelPoints.InsertPoint(n, actualPoint)    
 
   #for (int i=0; i<numberOfIterations; i++)
   #  {
