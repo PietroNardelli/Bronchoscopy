@@ -17,7 +17,7 @@ class Bronchoscopy:
     Scripted loadable module bundled in an extension for centerline extraction and virtual navigation within a 3D airway model.
     """
     parent.acknowledgementText = """
-    This file was originally developed by Pietro Nardelli and Alberto Corvo, University College Cork.
+    This file was originally developed by Pietro Nardelli and Alberto Corvo', University College Cork.
 """ # replace with organization, grant and thanks.
     self.parent = parent
 
@@ -39,29 +39,14 @@ class BronchoscopyWidget:
     self.cameraObserverTag= None
 
     #
-    # Flythrough Variables    
-    #
-    self.transform = None
-    self.path = None
-    self.camera = None
-    self.skip = 0
-    self.fiducialNode = None
-
-    self.timer = qt.QTimer()
-    self.timer.setInterval(20)
-    #self.timer.connect('timeout()', self.flyToNext)
-
-    #
     # Sensor Tracking Variables
     #
     self.sensorTimer = qt.QTimer()
     self.sensorTimer.setInterval(1)
     self.sensorTimer.connect('timeout()', self.ReadPosition)
 
-    self.track = slicer.vtkMRMLModelNode()
-    self.ModelDisplay = slicer.vtkMRMLModelDisplayNode()
-
-    self.coordinates = []
+    self.fiducialNode = None
+    self.path = None
 
     self.probeCalibrationTransform = None
     self.centerlineCompensationTransform = None
@@ -73,7 +58,6 @@ class BronchoscopyWidget:
 
     if not parent:
       self.setup()
-      self.virtualCameraNodeSelector.setMRMLScene(slicer.mrmlScene)
       self.parent.show()
       self.updateGUI()
 
@@ -96,7 +80,6 @@ class BronchoscopyWidget:
     reloadFormLayout.addWidget(self.reloadButton)
     self.reloadButton.connect('clicked()', self.onReload)
 
-
     # Instantiate and connect widgets ...
 
     #
@@ -109,9 +92,9 @@ class BronchoscopyWidget:
     # Layout within the dummy collapsible button
     IOFormLayout = qt.QFormLayout(parametersCollapsibleButton)
 
-    #
-    # 3D Model Selector
-    #
+    ###################################################################################
+    ##############################  3D Model Selector  ################################
+    ###################################################################################
     self.inputSelector = slicer.qMRMLNodeComboBox()
     self.inputSelector.nodeTypes = ( ("vtkMRMLModelNode"), "" )
     self.inputSelector.selectNodeUponCreation = True
@@ -131,9 +114,9 @@ class BronchoscopyWidget:
       modelDisplayNode.SetFrontfaceCulling(1)
       modelDisplayNode.SetBackfaceCulling(0)
 
-    #
-    # Label Selector
-    #
+    ###################################################################################
+    ###############################  Label Selector  ##################################
+    ###################################################################################
     self.labelSelector = slicer.qMRMLNodeComboBox()
     self.labelSelector.nodeTypes = ( ("vtkMRMLScalarVolumeNode"), "" )
     self.labelSelector.addAttribute( "vtkMRMLScalarVolumeNode", "LabelMap", 1 )
@@ -147,9 +130,9 @@ class BronchoscopyWidget:
     self.labelSelector.setToolTip( "Pick the 3D input model to the algorithm." )
     IOFormLayout.addRow("Airway Label: ", self.labelSelector)
  
-    #
-    # Create Path Button
-    #
+    ###################################################################################
+    #############################  Create Path Button  ################################
+    ###################################################################################
     self.CreatePathButton = qt.QPushButton("Create Path")
     self.CreatePathButton.toolTip = "Run the algorithm to create path between fiducials."
     self.CreatePathButton.setFixedSize(200,50)
@@ -159,21 +142,33 @@ class BronchoscopyWidget:
         self.CreatePathButton.enabled = False
     IOFormLayout.addWidget(self.CreatePathButton)
 
-    #
-    # Virtual Navigation Flythrough Collapsible Button
-    #
-    self.flythroughCollapsibleButton = ctk.ctkCollapsibleButton()
-    self.flythroughCollapsibleButton.text = "Virtual Navigation"
-    self.flythroughCollapsibleButton.setChecked(False)
-    #self.flythroughCollapsibleButton.setFixedSize(400,40)
-    self.flythroughCollapsibleButton.enabled = False
-    self.layout.addWidget(self.flythroughCollapsibleButton)
-    flythroughFormLayout = qt.QFormLayout(self.flythroughCollapsibleButton)
+    ####################################################################################
+    #### Optional Collapsible Button To Select An Uploaded Centerline Fiducials List ###
+    ####################################################################################
+    self.fiducialsCollapsibleButton = ctk.ctkCollapsibleButton()
+    self.fiducialsCollapsibleButton.text = "Centerline Fiducials List"
+    self.fiducialsCollapsibleButton.setChecked(False)
+    #self.fiducialsCollapsibleButton.setFixedSize(400,40)
+    self.fiducialsCollapsibleButton.enabled = True
+    self.layout.addWidget(self.fiducialsCollapsibleButton)
+    fiducialFormLayout = qt.QFormLayout(self.fiducialsCollapsibleButton)
+
+    self.fiducialListSelector = slicer.qMRMLNodeComboBox()
+    self.fiducialListSelector.nodeTypes = ( ("vtkMRMLMarkupsFiducialNode"), "" )
+    self.fiducialListSelector.selectNodeUponCreation = True
+    self.fiducialListSelector.addEnabled = False
+    self.fiducialListSelector.removeEnabled = True
+    self.fiducialListSelector.noneEnabled = False
+    self.fiducialListSelector.showHidden = False
+    self.fiducialListSelector.showChildNodeTypes = False
+    self.fiducialListSelector.setMRMLScene( slicer.mrmlScene )
+    self.fiducialListSelector.setToolTip( "Pick the 3D input model to the algorithm." )
+    fiducialFormLayout.addRow("Centerline Fiducials List: ", self.fiducialListSelector)
     
     #
     # Virtual Navigation Camera Node Selector
     #
-    self.virtualCameraNodeSelector = slicer.qMRMLNodeComboBox()
+    '''self.virtualCameraNodeSelector = slicer.qMRMLNodeComboBox()
     self.virtualCameraNodeSelector.objectName = 'virtualCameraNodeSelector'
     self.virtualCameraNodeSelector.toolTip = "Select a camera that will fly along the path for the virtual navigation."
     self.virtualCameraNodeSelector.nodeTypes = ['vtkMRMLCameraNode']
@@ -184,75 +179,27 @@ class BronchoscopyWidget:
     self.virtualCameraNodeSelector.showHidden = True
     flythroughFormLayout.addRow("Camera:", self.virtualCameraNodeSelector)
     self.parent.connect('mrmlSceneChanged(vtkMRMLScene*)', 
-                        self.virtualCameraNodeSelector, 'setMRMLScene(vtkMRMLScene*)')
-    #
-    # Frame Slider
-    #
-    self.frameSlider = ctk.ctkSliderWidget()
-    self.frameSlider.connect('valueChanged(double)', self.frameSliderValueChanged)
-    self.frameSlider.decimals = 0
-    flythroughFormLayout.addRow("Frame:", self.frameSlider)
-    
-    #
-    # Frame Skip Slider
-    #
-    self.frameSkipSlider = ctk.ctkSliderWidget()
-    self.frameSkipSlider.connect('valueChanged(double)', self.frameSkipSliderValueChanged)
-    self.frameSkipSlider.decimals = 0
-    self.frameSkipSlider.minimum = 0
-    self.frameSkipSlider.maximum = 10
-    flythroughFormLayout.addRow("Frame skip:", self.frameSkipSlider)
-    
-    #
-    # Frame Delay Slider
-    #
-    self.frameDelaySlider = ctk.ctkSliderWidget()
-    self.frameDelaySlider.connect('valueChanged(double)', self.frameDelaySliderValueChanged)
-    self.frameDelaySlider.decimals = 0
-    self.frameDelaySlider.minimum = 0
-    self.frameDelaySlider.maximum = 500
-    self.frameDelaySlider.suffix = " ms"
-    self.frameDelaySlider.value = 50
-    flythroughFormLayout.addRow("Frame delay:", self.frameDelaySlider)
-    
-    #
-    # View Angle Slider
-    #
-    self.viewAngleSlider = ctk.ctkSliderWidget()
-    self.viewAngleSlider.connect('valueChanged(double)', self.viewAngleSliderValueChanged)
-    self.viewAngleSlider.decimals = 0
-    self.viewAngleSlider.minimum = 30
-    self.viewAngleSlider.maximum = 180
-    flythroughFormLayout.addRow("View Angle:", self.viewAngleSlider)
-    
-    #
-    # Create Virtual Navigation Button
-    #
-    self.NavigationButton = qt.QPushButton("Play")
-    self.NavigationButton.toolTip = "Fly through path."
-    self.NavigationButton.checkable = True
-    self.NavigationButton.enabled = False
-    self.NavigationButton.setFixedSize(200,50)
-    flythroughFormLayout.addWidget(self.NavigationButton)
+                        self.virtualCameraNodeSelector, 'setMRMLScene(vtkMRMLScene*)') '''  
 
-    #
-    # 'Track Sensor' Collapsible Button 
-    #
+    #############################################################################################
+    ###########################  Sensor Tracker Collapsible Button  #############################
+    #############################################################################################
+
     trackerCollapsibleButton = ctk.ctkCollapsibleButton()
     trackerCollapsibleButton.text = "Probe Tracking"
     self.layout.addWidget(trackerCollapsibleButton)
     self.layout.setSpacing(20)
     trackerFormLayout = qt.QFormLayout(trackerCollapsibleButton)
 
-    #
-    # Matlab Track Button
-    #
+    ##############################################################################################
+    ##############################  Matlab/Sensor Track Button  ##################################
+    ##############################################################################################
     self.MatlabTrackButton = qt.QPushButton("Track Sensor")
-    self.MatlabTrackButton.toolTip = "Take Sensor output."
+    self.MatlabTrackButton.toolTip = "Track sensor output."
     #self.MatlabTrackButton.setFixedSize(300,40)
     self.MatlabTrackButton.setFixedHeight(40)
     self.MatlabTrackButton.checkable = True
-    if( self.inputSelector.currentNode() ):
+    if self.fiducialListSelector.currentNode():
         self.MatlabTrackButton.enabled = True
     else:
         self.MatlabTrackButton.enabled = False
@@ -265,8 +212,7 @@ class BronchoscopyWidget:
     self.CreatePathButton.connect('clicked(bool)', self.onCreatePathButton)
     self.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.labelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
-    self.NavigationButton.connect('toggled(bool)', self.onNavigationButtonToggled)
-    self.virtualCameraNodeSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.setCameraNode)
+    self.fiducialListSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.MatlabTrackButton.connect('toggled(bool)', self.onMatlabTrackButtonToggled)
     
     #
@@ -294,10 +240,19 @@ class BronchoscopyWidget:
 
   def onSelect(self):
     if self.inputSelector.currentNode() and self.labelSelector.currentNode():
+      inputVolume = self.inputSelector.currentNode()
+      modelDisplayNode = inputVolume.GetDisplayNode()
+      modelDisplayNode.SetColor(1.0, 0.8, 0.7)
+      modelDisplayNode.SetFrontfaceCulling(1)
+      modelDisplayNode.SetBackfaceCulling(0)
+
+      self.updateGUI()
       self.CreatePathButton.enabled = True
+      if self.fiducialListSelector.currentNode():
+        self.MatlabTrackButton.enabled = True
     else:
       self.CreatePathButton.enabled = False
-      self.NavigationButton.enabled = False
+      self.MatlabTrackButton.enabled = False
 
   def onReload(self,moduleName="Bronchoscopy"):
     """Generic reload method for any scripted module.
@@ -351,17 +306,21 @@ class BronchoscopyWidget:
 ################################### CREATE PATH ######################################## 
 
   def onCreatePathButton(self):
-    print("Create the paths between fiducials")
+    # Disable Buttons 
     self.CreatePathButton.enabled = False
-    self.flythroughCollapsibleButton.enabled = False
-    self.NavigationButton.enabled = False
     self.MatlabTrackButton.enabled = False
+    
+    # Create Centerline Path 
     self.createPath(self.labelSelector.currentNode()) 
+    
+    # Enable Buttons Again
     self.CreatePathButton.enabled = True
     self.MatlabTrackButton.enabled = True
+
+    # Update GUI
     self.updateGUI()
 
-  def createPath(self,labelVolume): #,fiducialList):
+  def createPath(self,labelVolume):
     """
     Run the actual algorithm to create the path between the 2 fiducials
     """
@@ -404,8 +363,6 @@ class BronchoscopyWidget:
     
       self.centerline = centerlineExtraction.GetOutput()
 
-
-
       #
       # Smooth the path to get a better result
       #
@@ -430,141 +387,59 @@ class BronchoscopyWidget:
       markupLogic = slicer.modules.markups.logic()
       markupLogic.SetActiveListID(lastMarkupNode)"""
 
-    self.centerline = slicer.vtkMRMLScalarVolumeNode()
-    #self.centerline.addAttribute( "vtkMRMLScalarVolumeNode", "LabelMap", 1 )
-    slicer.mrmlScene.AddNode( self.centerline )
-
-    centerlineExtraction = slicer.modules.centerlineextractioncli
-    parameters = {
-        "inputVolume": labelVolume.GetID(),
-        "outputVolume": self.centerline.GetID(),	  
-        }
-    slicer.cli.run( centerlineExtraction,None,parameters,wait_for_completion=True )
-
-    # create 3D model of the centerline
-    nodeType = 'vtkMRMLModelHierarchyNode'
-    modelHierarchy = slicer.mrmlScene.CreateNodeByClass(nodeType)
-    modelHierarchy.SetScene(slicer.mrmlScene)
-    modelHierarchy.SetName(slicer.mrmlScene.GetUniqueNameByString('CenterlineModelHierarchy'))
-    slicer.mrmlScene.AddNode(modelHierarchy)
-
-    parameters = {}
-    parameters["InputVolume"] = self.centerline.GetID()
-    parameters["ModelSceneFile"] = modelHierarchy.GetID()
-    parameters["Name"] = 'CenterlineModel'
-    #parameters["FilterType"] = 'Laplacian'
-    parameters["Smooth"] = 0
-    parameters["Decimate"] = 0.00
-    
-    modelMaker = slicer.modules.modelmaker
-    slicer.cli.run(modelMaker, None, parameters,True)
-
-    # create fiducial path
-    nodeType = 'vtkMRMLMarkupsFiducialNode'
-    self.fiducialNode = slicer.mrmlScene.CreateNodeByClass(nodeType)
-    self.fiducialNode.SetScene(slicer.mrmlScene)
-    self.fiducialNode.SetName('CenterlineFiducials')
-    slicer.mrmlScene.AddNode(self.fiducialNode)
-
-    modelsCollection = slicer.mrmlScene.GetNodesByClass('vtkMRMLModelNode')
-    numberOfItems = modelsCollection.GetNumberOfItems()
-    self.centerlineModel = modelsCollection.GetItemAsObject(numberOfItems-1)
-
-    self.polydata = self.centerlineModel.GetPolyData()
-    self.points = vtk.vtkPoints()
-
-    iterations = 5
-    self.Smoothing(self.polydata, self.points, iterations)
-    self.CreateFiducialsCenterline(self.points, self.fiducialNode)
-
-    # Create model node
-    #model = slicer.vtkMRMLModelNode()
-    #model.SetScene(slicer.mrmlScene)
-    #model.SetName(slicer.mrmlScene.GenerateUniqueName("Path-%s" % self.fiducialNode.GetName()))
-    #model.SetAndObservePolyData(self.polydata)
-
-    # Create display node
-    #modelDisplay = slicer.vtkMRMLModelDisplayNode()
-    #modelDisplay.SetColor(1,0,0) # yellow
-    #modelDisplay.SetScene(slicer.mrmlScene)
-    #slicer.mrmlScene.AddNode(modelDisplay)
-    #model.SetAndObserveDisplayNodeID(modelDisplay.GetID())
-
-    # Add to scene
-    #if vtk.VTK_MAJOR_VERSION <= 5:
-      # shall not be needed.
-    #  modelDisplay.SetInputPolyData(model.GetPolyData())
-    #slicer.mrmlScene.AddNode(model)
-
-    #self.CreateFiducialPath(self.centerlineModel, self.fiducialNode)
-   
-    #result = BronchoscopyComputePath(self.fiducialNode)
-    #print "-> Computed path contains %d elements" % len(result.path)
-    #model = BronchoscopyPathModel(self.fiducialNode) #(result.path, self.fiducialNode)
-    #print "-> Model created"
-
-    #
-    # Update Frame Slider Range
-    #
-    #if( fiducialList.GetNumberOfMarkups() == 2 ):
-     # self.frameSlider.maximum = len(result.path) - 2
-    self.frameSlider.maximum = self.fiducialNode.GetNumberOfFiducials() - 2
-      #
-      # Update Flythrough Variables
-      #
-    self.camera = self.camera
-
-    # Camera cursor
-    sphere = vtk.vtkSphereSource()
-    sphere.Update()
-     
-    # Create model node
-    cursor = slicer.vtkMRMLModelNode()
-    cursor.SetScene(slicer.mrmlScene)
-    cursor.SetName(slicer.mrmlScene.GenerateUniqueName("Cursor-%s" % self.fiducialNode.GetName()))
-    if vtk.VTK_MAJOR_VERSION <= 5:
-      cursor.SetAndObservePolyData(sphere.GetOutput())
+    if self.fiducialListSelector.currentNode():  # if a fiducial list was already uploaded, all that follows is not necessary!
+      self.fiducialNode = self.fiducialListSelector.currentNode()
     else:
-      cursor.SetPolyDataConnection(sphere.GetOutputPort())
+      self.centerline = slicer.vtkMRMLScalarVolumeNode()
+      #self.centerline.addAttribute( "vtkMRMLScalarVolumeNode", "LabelMap", 1 )
+      slicer.mrmlScene.AddNode( self.centerline )
 
-    # Create display node
-    cursorModelDisplay = slicer.vtkMRMLModelDisplayNode()
-    cursorModelDisplay.SetColor(1,0,0) # red
-    cursorModelDisplay.SetScene(slicer.mrmlScene)
-    slicer.mrmlScene.AddNode(cursorModelDisplay)
-    cursor.SetAndObserveDisplayNodeID(cursorModelDisplay.GetID())
+      centerlineExtraction = slicer.modules.centerlineextractioncli
+      parameters = {
+          "inputVolume": labelVolume.GetID(),
+          "outputVolume": self.centerline.GetID(),	  
+          }
+      slicer.cli.run( centerlineExtraction,None,parameters,wait_for_completion=True )
 
-    # Add to scene
-    if vtk.VTK_MAJOR_VERSION <= 5:
-      # Shall not be needed.
-      cursorModelDisplay.SetInputPolyData(sphere.GetOutput())
-    slicer.mrmlScene.AddNode(cursor)
+      # create 3D model of the centerline
+      hierarchyList = slicer.mrmlScene.GetNodesByName('CenterlineModelHierarchy')
+      if hierarchyList.GetNumberOfItems() == 0:
+        modelHierarchy = slicer.vtkMRMLModelHierarchyNode()
+        modelHierarchy.SetName('CenterlineModelHierarchy')
+        slicer.mrmlScene.AddNode(modelHierarchy)
+      else:
+        modelHierarchy = hierarchyList.GetItemAsObject(0)
 
-    # Create transform node
-    transform = slicer.vtkMRMLLinearTransformNode()
-    transform.SetName(slicer.mrmlScene.GenerateUniqueName("Transform-%s" % self.fiducialNode.GetName()))
-    slicer.mrmlScene.AddNode(transform)
-    cursor.SetAndObserveTransformNodeID(transform.GetID())
+      parameters = {}
+      parameters["InputVolume"] = self.centerline.GetID()
+      parameters["ModelSceneFile"] = modelHierarchy.GetID()
+      parameters["Name"] = 'CenterlineModel'
+      #parameters["FilterType"] = 'Laplacian'
+      parameters["Smooth"] = 0
+      parameters["Decimate"] = 0.00
     
-    self.transform = transform
-    toParent = vtk.vtkMatrix4x4()
-    self.transform.GetMatrixTransformToParent(toParent)
-    index = [0,0,0]
-    self.fiducialNode.GetNthFiducialPosition(0,index)
-    toParent.SetElement(0 ,3, index[0])
-    toParent.SetElement(1, 3, index[1])
-    toParent.SetElement(2, 3, index[2])
-    self.transform.SetMatrixTransformToParent(toParent)
+      modelMaker = slicer.modules.modelmaker
+      slicer.cli.run(modelMaker, None, parameters,True)
 
+      # turn off visibility of the created centerline model   
+      modelsCollection = slicer.mrmlScene.GetNodesByClass('vtkMRMLModelNode')
+      numberOfItems = modelsCollection.GetNumberOfItems()
+      self.centerlineModel = modelsCollection.GetItemAsObject(numberOfItems-1)
+      self.centerlineModel.SetDisplayVisibility(0)
 
-    #self.transform = model.transform
-    #self.path = result.path
-    
-    #
-    # Enable/Disable Flythrough Button
-    #
-    self.flythroughCollapsibleButton.enabled = True #len(result.path) > 0
-    self.NavigationButton.enabled = True #len(result.path) > 0
+      # create fiducial list
+      self.fiducialNode = slicer.vtkMRMLMarkupsFiducialNode()
+      self.fiducialNode.SetName('CenterlineFiducials')
+      slicer.mrmlScene.AddNode(self.fiducialNode)
+
+      centerlinePolydata = self.centerlineModel.GetPolyData()
+      self.points = vtk.vtkPoints()
+
+      iterations = 5
+      self.Smoothing(centerlinePolydata, self.points, iterations)
+      self.CreateFiducialsCenterline(self.points, self.fiducialNode)
+
+    self.fiducialNode.SetDisplayVisibility(0)
     self.MatlabTrackButton.enabled = True
 
     return True
@@ -592,8 +467,10 @@ class BronchoscopyWidget:
     for i in range(0, NoP):
       centerlinePoints.GetPoint(i,point)
       fiducialList.AddFiducial(point[0],point[1],point[2])
-      fiducialList.SetNthMarkupVisibility(NthFiducial,0)
+      #fiducialList.SetNthMarkupVisibility(NthFiducial,0)
       NthFiducial += 1
+
+    #fiducialList.SetDisplayVisibility(0)
 
   def Smoothing(self, pathModel, modelPoints, iterationsNumber):
     
@@ -681,6 +558,8 @@ class BronchoscopyWidget:
         #
         k = n+1
         pointsBelow = pointsList[k:]
+        previousPointsList = pointsList[n-100:n]
+        pointsBelow = pointsBelow + previousPointsList
         distancePointsBelow = ((pointsBelow-actualPoint)**2).sum(axis=1)
         ndxBelow = distancePointsBelow.argsort()
         nextPoint = pointsBelow[ndxBelow[0]]      
@@ -725,15 +604,9 @@ class BronchoscopyWidget:
         relaxation = 0.5
         
         if applySmooth == 1:
-          if n == 97:
-            print "before: ", actualPoint
-            print "prevPoint: ", prevPoint
-            print "nextPoint: ", nextPoint
           actualPoint[0] += relaxation * (0.5 * (prevPoint[0] + nextPoint[0]) - actualPoint[0]);
           actualPoint[1] += relaxation * (0.5 * (prevPoint[1] + nextPoint[1]) - actualPoint[1]);
           actualPoint[2] += relaxation * (0.5 * (prevPoint[2] + nextPoint[2]) - actualPoint[2]);
-          if n == 97:
-            print "after: ", actualPoint 
 
         if iteration == 0:
           modelPoints.InsertNextPoint(actualPoint)
@@ -788,115 +661,16 @@ class BronchoscopyWidget:
     
     #self.polydata = centerlineSmoothing.GetOutput()
 
-############################# VIRTUAL NAVIGATION #################################
-
-  def onNavigationButtonToggled(self, checked):
-    if checked:
-      self.CreatePathButton.enabled = False
-      self.MatlabTrackButton.enabled = False
-      self.timer.start()
-      self.NavigationButton.text = "Stop Navigation"
-    else:
-      self.CreatePathButton.enabled = True
-      self.MatlabTrackButton.enabled = True
-      self.timer.stop()
-      self.NavigationButton.text = "Play Navigation"
-
-  def setCameraNode(self, newCameraNode):
-    """Allow to set the current camera node. 
-    Connected to signal 'currentNodeChanged()' emitted by camera node selector."""
-    
-    #
-    # Remove Previous Observer
-    #
-    if self.cameraNode and self.cameraNodeObserverTag:
-      self.cameraNode.RemoveObserver(self.cameraNodeObserverTag)
-    if self.camera and self.cameraObserverTag:
-      self.camera.RemoveObserver(self.cameraObserverTag)
-    
-    newCamera = None
-    if newCameraNode:
-      newCamera = newCameraNode.GetCamera()
-      # Add CameraNode ModifiedEvent observer
-      self.cameraNodeObserverTag = newCameraNode.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onCameraNodeModified)
-      # Add Camera ModifiedEvent observer
-      self.cameraObserverTag = newCamera.AddObserver(vtk.vtkCommand.ModifiedEvent, self.onCameraNodeModified)
-      
-    self.cameraNode = newCameraNode
-    self.camera = newCamera
-    
-    #
-    # Update UI
-    #    
-    self.updateWidgetFromMRML()
-  
-  def updateWidgetFromMRML(self):
-    if self.camera:
-        self.viewAngleSlider.value = self.camera.GetViewAngle()
-    if self.cameraNode:
-        pass
-    
-  def onCameraModified(self, observer, eventid):
-    self.updateWidgetFromMRML()
-    
-  def onCameraNodeModified(self, observer, eventid):
-    self.updateWidgetFromMRML()    
-   
-  def frameSliderValueChanged(self, newValue):
-    #print "frameSliderValueChanged:", newValue
-    #self.flyTo(newValue)  
-    print "hihi"
-  def frameSkipSliderValueChanged(self, newValue):
-    #print "frameSkipSliderValueChanged:", newValue
-    self.skip = int(newValue)
-    
-  def frameDelaySliderValueChanged(self, newValue):
-    #print "frameDelaySliderValueChanged:", newValue
-    self.timer.interval = newValue
-    
-  def viewAngleSliderValueChanged(self, newValue):
-    if not self.cameraNode:
-      return
-    #print "viewAngleSliderValueChanged:", newValue
-    self.cameraNode.GetCamera().SetViewAngle(newValue)
-      
-  def flyToNext(self):
-    currentStep = self.frameSlider.value
-    nextStep = currentStep + self.skip + 1
-    if nextStep > self.fiducialNode.GetNumberOfFiducials() - 2: #len(self.path) - 2:
-      nextStep = 0
-    self.frameSlider.value = nextStep
-    
-  def flyTo(self, f):
-    """ Apply the fth step in the path to the global camera"""
-    #if self.path:
-    f = int(f)
-      #p = self.path[f]
-    p = [0,0,0]
-    foc = [0,0,0]
-    if self.fiducialNode:
-      self.fiducialNode.GetNthFiducialPosition(f,p)
-      self.camera.SetPosition(p)
-      #foc = self.path[f+1]
-      self.fiducialNode.GetNthFiducialPosition(f+1,foc)
-      self.camera.SetFocalPoint(foc)
-
-      toParent = vtk.vtkMatrix4x4()
-      self.transform.GetMatrixTransformToParent(toParent)
-      toParent.SetElement(0, 3, p[0])
-      toParent.SetElement(1, 3, p[1])
-      toParent.SetElement(2, 3, p[2])
-      self.transform.SetMatrixTransformToParent(toParent)
-
 ############################# SENSOR TRACKING #################################
 
   def onMatlabTrackButtonToggled(self, checked):     
     if checked:
-      #self.carina = 0
-      #self.fiducialNumber = 0
-      #self.CreatePathButton.enabled = False
-      #self.flythroughCollapsibleButton.enabled = False
-      #self.NavigationButton.enabled = False
+      if self.fiducialListSelector.currentNode():
+        self.fiducialNode = self.fiducialListSelector.currentNode()
+        self.fiducialNode.SetDisplayVisibility(0)
+  
+      self.CreatePathButton.enabled = False
+
       self.MatlabTrackButton.text = "Stop Tracking"
 
       if self.cNode == None:
@@ -946,6 +720,7 @@ class BronchoscopyWidget:
           probeNode.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
 
       ################## Camera is connected to the transform #####################
+
       cameraNodes = slicer.mrmlScene.GetNodesByName('PerspexCamera')
       if cameraNodes.GetNumberOfItems() > 0:
         self.cameraForNavigation = cameraNodes.GetItemAsObject(0)
@@ -978,10 +753,9 @@ class BronchoscopyWidget:
       #self.cNode = None
       #self.cameraForNavigation = None
       #self.probeCalibrationTransform = None
-      #self.carina = 0
-      #self.CreatePathButton.enabled = True
-      #self.flythroughCollapsibleButton.enabled = True
-      #self.NavigationButton.enabled = True
+      self.CreatePathButton.enabled = True
+
+      self.CreatePathButton.enabled = True
       self.MatlabTrackButton.text = "Track Sensor"
 
   def ReadPosition(self):
@@ -990,7 +764,7 @@ class BronchoscopyWidget:
         if self.probeToTrackerTransformNode == None:
           self.probeToTrackerTransformNode = transformNodesCollection.GetItemAsObject(0)        
 
-	######################Testing centerline compensation#########################
+	###################### Centerline Compensation #########################
 
         if self.probeToTrackerTransformNode:
           transformMatrix = vtk.vtkMatrix4x4()
@@ -1008,7 +782,8 @@ class BronchoscopyWidget:
     distance = []
 
     if self.fiducialNode == None:
-      fiducialNodesCollection = slicer.mrmlScene.GetNodesByName('CenterlineFiducials_Testing')
+      #fiducialNodesCollection = slicer.mrmlScene.GetNodesByName('CenterlineFiducials_Testing')
+      fiducialNodesCollection = slicer.mrmlScene.GetNodesByName('CenterlineFiducials')
       self.fiducialNode = fiducialNodesCollection.GetItemAsObject(0)
 
     for i in xrange(self.fiducialNode.GetNumberOfFiducials()):
@@ -1031,7 +806,9 @@ class BronchoscopyWidget:
     tMatrix.SetElement(1,3,closestPoint[1])
     tMatrix.SetElement(2,3,closestPoint[2])
 
-    ##### Continuosly update ViewUp of the camera so it's always on the orthogonal direction to the locator's long axis #########
+    ####################################################################################################################
+    # Continuosly Update ViewUp Of The Camera To Always Have It On The Direction Orthogonal To The Locator's Long Axis #
+    ####################################################################################################################
 
     x = closestPoint[0]
     y = closestPoint[1]
@@ -1045,77 +822,7 @@ class BronchoscopyWidget:
     self.redLogic.SetSliceOffset(z)
 
     self.centerlineCompensationTransform.SetMatrixTransformToParent(tMatrix)
-    '''if self.fiducialNode:
-      fiducialCoord = [0,0,0]
-      checkedCoord = [0,0,0]
-      closest = 0
-      i = 0
-      pos = 0      
 
-      while i < self.fiducialNode.GetNumberOfFiducials() and not(closest):
-        self.fiducialNode.GetNthFiducialPosition(i,fiducialCoord)
- 
-        if (abs(fiducialCoord[2]-originalCoord[2]) < 5 and abs(fiducialCoord[0]-originalCoord[0]) < 10 and abs(fiducialCoord[1]-originalCoord[1]) < 10 ):
-          for offset in range(1,20):
-            self.fiducialNode.GetNthFiducialPosition(i+offset,checkedCoord)
-            if( abs(checkedCoord[0]-originalCoord[0]) <= abs(fiducialCoord[0]-originalCoord[0]) and 
-                abs(checkedCoord[2]-originalCoord[2]) <= abs(fiducialCoord[2]-originalCoord[2]) and 
-                abs(checkedCoord[1]-originalCoord[1]) < 2 ): 
-              fiducialCoord[0] = checkedCoord[0]
-              fiducialCoord[1] = checkedCoord[1]
-              fiducialCoord[2] = checkedCoord[2]
-
-              pos=i+offset
-             
-          closest = 1
-
-          if pos == 0:
-            pos = i
-
-          originalCoord[0] = fiducialCoord[0]
-          originalCoord[1] = fiducialCoord[1]
-          originalCoord[2] = fiducialCoord[2]
-
-        i += 1  
-
-      tMatrix.SetElement(0,3,originalCoord[0])
-      tMatrix.SetElement(1,3,originalCoord[1])
-      tMatrix.SetElement(2,3,originalCoord[2]) 
-
-      self.transformNode.SetMatrixTransformToParent(tMatrix)'''
-
-  def RealPositionValueChanged(self):
-    """ Apply the fth step in the path to the global camera"""
-    if self.fiducialNode:
-        self.fiducialNumber += 1
-        #print self.fiducialNumber
-        self.CheckCurrentPosition(self.coordinates) 
-	f = self.coordinates
-    	self.camera.SetPosition(*f)
-	foc = self.focalPoint
-        #fidPoint = [0,0,0]
-        #nextFidPoint = [0,0,0]
-        #foc = [0,0,0]
-	#self.fiducialNode.GetNthFiducialPosition(self.fiducialNumber,fidPoint)
-	
-        #if( self.fiducialNumber+10 > self.fiducialNode.GetNumberOfFiducials() ):
-        #  self.fiducialNode.GetNthFiducialPosition(self.fiducialNode.GetNumberOfFiducials()-1,nextFidPoint)
-        #else:
-        #  self.fiducialNode.GetNthFiducialPosition(self.fiducialNumber+10,nextFidPoint)
-	       
-        #foc[0] = (fidPoint[0]+nextFidPoint[0])/2
-        #foc[1] = (fidPoint[1]+nextFidPoint[1])/2
-        #foc[2] = (fidPoint[2]+nextFidPoint[2])/2
-
-	self.camera.SetFocalPoint(*foc)
- 
-        toParent = vtk.vtkMatrix4x4()
-        self.transform.GetMatrixTransformToParent(toParent)
-        toParent.SetElement(0, 3, f[0])
-        toParent.SetElement(1, 3, f[1])
-        toParent.SetElement(2, 3, f[2])
-        self.transform.SetMatrixTransformToParent(toParent)
-    
 class BronchoscopyComputePath:
   """Compute path given a list of fiducials. 
   A Hermite spline interpolation is used. See http://en.wikipedia.org/wiki/Cubic_Hermite_spline
