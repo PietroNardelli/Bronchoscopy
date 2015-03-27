@@ -48,6 +48,8 @@ class BronchoscopyWidget:
     self.fiducialNode = None
     self.path = None
 
+    self.pathCreated = 0
+    
     self.probeCalibrationTransform = None
     self.centerlineCompensationTransform = None
     self.cameraForNavigation = None
@@ -66,7 +68,7 @@ class BronchoscopyWidget:
     # Reload and Test area
     #
     reloadCollapsibleButton = ctk.ctkCollapsibleButton()
-    reloadCollapsibleButton.text = "Reload && Test"
+    reloadCollapsibleButton.text = "Reload Section"
     self.layout.addWidget(reloadCollapsibleButton)
     self.layout.setSpacing(6)
     reloadFormLayout = qt.QFormLayout(reloadCollapsibleButton)
@@ -86,7 +88,7 @@ class BronchoscopyWidget:
     # Parameters Area
     #
     parametersCollapsibleButton = ctk.ctkCollapsibleButton()
-    parametersCollapsibleButton.text = "Bronchoscopy Path Creation"
+    parametersCollapsibleButton.text = "Centerline Extraction Area"
     self.layout.addWidget(parametersCollapsibleButton)
     self.layout.setSpacing(20)
     # Layout within the dummy collapsible button
@@ -131,16 +133,16 @@ class BronchoscopyWidget:
     IOFormLayout.addRow("Airway Label: ", self.labelSelector)
  
     ###################################################################################
-    #############################  Create Path Button  ################################
+    #########################  Extract Centerline Button  #############################
     ###################################################################################
-    self.CreatePathButton = qt.QPushButton("Create Path")
-    self.CreatePathButton.toolTip = "Run the algorithm to create path between fiducials."
-    self.CreatePathButton.setFixedSize(200,50)
+    self.ExtractCenterlineButton = qt.QPushButton("Extract Centerline")
+    self.ExtractCenterlineButton.toolTip = "Run the algorithm to extract centerline of the model on which fiducials will be placed. Fiducials are necessary to compensate for possible registration issues."
+    self.ExtractCenterlineButton.setFixedSize(200,50)
     if self.inputSelector.currentNode() and self.labelSelector.currentNode():
-        self.CreatePathButton.enabled = True
+        self.ExtractCenterlineButton.enabled = True
     else:
-        self.CreatePathButton.enabled = False
-    IOFormLayout.addWidget(self.CreatePathButton)
+        self.ExtractCenterlineButton.enabled = False
+    IOFormLayout.addWidget(self.ExtractCenterlineButton)
 
     ####################################################################################
     #### Optional Collapsible Button To Select An Uploaded Centerline Fiducials List ###
@@ -162,24 +164,43 @@ class BronchoscopyWidget:
     self.fiducialListSelector.showHidden = False
     self.fiducialListSelector.showChildNodeTypes = False
     self.fiducialListSelector.setMRMLScene( slicer.mrmlScene )
-    self.fiducialListSelector.setToolTip( "Pick the 3D input model to the algorithm." )
+    self.fiducialListSelector.setToolTip( "Select centerline fiducial list already uploaded" )
     fiducialFormLayout.addRow("Centerline Fiducials List: ", self.fiducialListSelector)
+
+    ####################################################################################
+    ######################  Create Path Towards An ROI Section  ########################
+    ####################################################################################
+    self.pathCreationCollapsibleButton = ctk.ctkCollapsibleButton()
+    self.pathCreationCollapsibleButton.text = "Path Creation"
+    self.pathCreationCollapsibleButton.setChecked(True)
+    #self.fiducialsCollapsibleButton.setFixedSize(400,40)
+    self.pathCreationCollapsibleButton.enabled = True
+    self.layout.addWidget(self.pathCreationCollapsibleButton)
+    pathCreationFormLayout = qt.QFormLayout(self.pathCreationCollapsibleButton)
+
+    self.pointsListSelector = slicer.qMRMLNodeComboBox()
+    self.pointsListSelector.nodeTypes = ( ("vtkMRMLMarkupsFiducialNode"), "" )
+    self.pointsListSelector.selectNodeUponCreation = True
+    self.pointsListSelector.addEnabled = False
+    self.pointsListSelector.removeEnabled = True
+    self.pointsListSelector.noneEnabled = False
+    self.pointsListSelector.showHidden = False
+    self.pointsListSelector.showChildNodeTypes = False
+    self.pointsListSelector.setMRMLScene( slicer.mrmlScene )
+    self.pointsListSelector.setToolTip( "Select points for path creation." )
+    pathCreationFormLayout.addRow("Points List: ", self.pointsListSelector)
     
-    #
-    # Virtual Navigation Camera Node Selector
-    #
-    '''self.virtualCameraNodeSelector = slicer.qMRMLNodeComboBox()
-    self.virtualCameraNodeSelector.objectName = 'virtualCameraNodeSelector'
-    self.virtualCameraNodeSelector.toolTip = "Select a camera that will fly along the path for the virtual navigation."
-    self.virtualCameraNodeSelector.nodeTypes = ['vtkMRMLCameraNode']
-    self.virtualCameraNodeSelector.noneEnabled = False
-    self.virtualCameraNodeSelector.addEnabled = False
-    self.virtualCameraNodeSelector.removeEnabled = False
-    self.virtualCameraNodeSelector.enabled = False
-    self.virtualCameraNodeSelector.showHidden = True
-    flythroughFormLayout.addRow("Camera:", self.virtualCameraNodeSelector)
-    self.parent.connect('mrmlSceneChanged(vtkMRMLScene*)', 
-                        self.virtualCameraNodeSelector, 'setMRMLScene(vtkMRMLScene*)') '''  
+    ###################################################################################
+    #############################  Path Creation Button  ############################## 
+    ###################################################################################
+    self.PathCreationButton = qt.QPushButton("Create Path")
+    self.PathCreationButton.toolTip = "Run the algorithm to create the path between the specified points."
+    self.PathCreationButton.setFixedSize(300,50)
+    if self.inputSelector.currentNode() and self.pointsListSelector.currentNode():
+        self.PathCreationButton.enabled = True
+    else:
+        self.PathCreationButton.enabled = False
+    pathCreationFormLayout.addWidget(self.PathCreationButton)
 
     #############################################################################################
     ###########################  Sensor Tracker Collapsible Button  #############################
@@ -192,28 +213,30 @@ class BronchoscopyWidget:
     trackerFormLayout = qt.QFormLayout(trackerCollapsibleButton)
 
     ##############################################################################################
-    ##############################  Matlab/Sensor Track Button  ##################################
+    ##############################  Matlab/Probe Track Button  ##################################
     ##############################################################################################
-    self.MatlabTrackButton = qt.QPushButton("Track Sensor")
-    self.MatlabTrackButton.toolTip = "Track sensor output."
-    #self.MatlabTrackButton.setFixedSize(300,40)
-    self.MatlabTrackButton.setFixedHeight(40)
-    self.MatlabTrackButton.checkable = True
+    self.ProbeTrackButton = qt.QPushButton("Track Sensor")
+    self.ProbeTrackButton.toolTip = "Track sensor output."
+    #self.ProbeTrackButton.setFixedSize(300,40)
+    self.ProbeTrackButton.setFixedHeight(40)
+    self.ProbeTrackButton.checkable = True
     if self.fiducialListSelector.currentNode():
-        self.MatlabTrackButton.enabled = True
+        self.ProbeTrackButton.enabled = True
     else:
-        self.MatlabTrackButton.enabled = False
+        self.ProbeTrackButton.enabled = False
     
-    trackerFormLayout.addWidget(self.MatlabTrackButton)
+    trackerFormLayout.addWidget(self.ProbeTrackButton)
 
     #
     # Create Connections
     #
-    self.CreatePathButton.connect('clicked(bool)', self.onCreatePathButton)
+    self.ExtractCenterlineButton.connect('clicked(bool)', self.onExtractCenterlineButton)
     self.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.labelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.fiducialListSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
-    self.MatlabTrackButton.connect('toggled(bool)', self.onMatlabTrackButtonToggled)
+    self.pointsListSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
+    self.PathCreationButton.connect('clicked(bool)', self.onPathCreationButton)
+    self.ProbeTrackButton.connect('toggled(bool)', self.onProbeTrackButtonToggled)
     
     #
     # Add Vertical Spacer
@@ -247,12 +270,18 @@ class BronchoscopyWidget:
       modelDisplayNode.SetBackfaceCulling(0)
 
       self.updateGUI()
-      self.CreatePathButton.enabled = True
+      self.ExtractCenterlineButton.enabled = True
       if self.fiducialListSelector.currentNode():
-        self.MatlabTrackButton.enabled = True
+        self.ProbeTrackButton.enabled = True
     else:
-      self.CreatePathButton.enabled = False
-      self.MatlabTrackButton.enabled = False
+      self.ExtractCenterlineButton.enabled = False
+      self.PathCreationButton.enabled = False
+      self.ProbeTrackButton.enabled = False
+
+    if self.inputSelector.currentNode() and self.pointsListSelector.currentNode():
+       self.PathCreationButton.enabled = True
+    else:
+       self.PathCreationButton.enabled = False
 
   def onReload(self,moduleName="Bronchoscopy"):
     """Generic reload method for any scripted module.
@@ -302,90 +331,30 @@ class BronchoscopyWidget:
     globals()[widgetName.lower()].setup()
     setattr(globals()['slicer'].modules, widgetName, globals()[widgetName.lower()])
 
+################################### Extract Centerline ######################################## 
 
-################################### CREATE PATH ######################################## 
-
-  def onCreatePathButton(self):
+  def onExtractCenterlineButton(self):
     # Disable Buttons 
-    self.CreatePathButton.enabled = False
-    self.MatlabTrackButton.enabled = False
+    self.ExtractCenterlineButton.enabled = False
+    self.ProbeTrackButton.enabled = False
+    self.inputSelector.enabled = False
+    self.labelSelector.enabled = False
+    self.fiducialListSelector.enabled = False
     
-    # Create Centerline Path 
-    self.createPath(self.labelSelector.currentNode()) 
+    # Extract Centerline 
+    self.extractCenterline(self.labelSelector.currentNode()) 
     
     # Enable Buttons Again
-    self.CreatePathButton.enabled = True
-    self.MatlabTrackButton.enabled = True
+    self.ExtractCenterlineButton.enabled = True
+    self.ProbeTrackButton.enabled = True
+    self.inputSelector.enabled = True
+    self.labelSelector.enabled = True
+    self.fiducialListSelector.enabled = True
 
     # Update GUI
     self.updateGUI()
 
-  def createPath(self,labelVolume):
-    """
-    Run the actual algorithm to create the path between the 2 fiducials
-    """
-    """import vtkSlicerCenterlineExtractionModuleLogic
-
-    #if( fiducialList.GetNumberOfMarkups() > 2 ):
-        #return False
-    
-    modelNodes = slicer.mrmlScene.GetNodesByClass('vtkMRMLModelNode')
-    for n in xrange( modelNodes.GetNumberOfItems() ):
-      node = modelNodes.GetItemAsObject(n)
-      nodeName = node.GetName()
-      replaceName = nodeName.replace('-', ' - ')
-      splitName = replaceName.split()
-      for item in splitName:
-        if (item == 'Path') or (item == 'Cursor') or (item == 'Transform'):
-          slicer.mrmlScene.RemoveNode(node)
-                 
-    inputPolyData = inputVolume.GetPolyData()
-    self.delayDisplay('Computing the path')
-    self.Picking(inputPolyData, fiducialList)
-        
-    centerlineExtraction = vtkSlicerCenterlineExtractionModuleLogic.vtkvmtkPolyDataCenterlines()
-    
-    for t in xrange(self.Target.GetNumberOfIds()):
-   
-      target = vtk.vtkIdList()
-      target.SetNumberOfIds(1) 
-      target.InsertId(0,self.Target.GetId(t))
-
-      centerlineExtraction.SetInputData(inputPolyData)
-      centerlineExtraction.SetSourceSeedIds(self.Source)
-      centerlineExtraction.SetTargetSeedIds(target)
-      centerlineExtraction.SetRadiusArrayName('MaximumInscribedSphereRadius')
-      centerlineExtraction.SimplifyVoronoiOn();
-      centerlineExtraction.CenterlineResamplingOn()
-      centerlineExtraction.SetCostFunction('1/R')
-      centerlineExtraction.GenerateDelaunayTessellationOn()
-      centerlineExtraction.Update()
-    
-      self.centerline = centerlineExtraction.GetOutput()
-
-      #
-      # Smooth the path to get a better result
-      #
-      #self.Smoothing(self.centerline)
-
-      nodeType = 'vtkMRMLMarkupsFiducialNode'
-      self.fiducialNode = slicer.mrmlScene.CreateNodeByClass(nodeType)
-      self.fiducialNode.SetScene(slicer.mrmlScene)
-      self.fiducialNode.SetName('CenterlineFiducial')
-      slicer.mrmlScene.AddNode(self.fiducialNode)
-    
-      self.CreateFiducialPath(self.centerline, self.fiducialNode)
-      result = BronchoscopyComputePath(self.fiducialNode)
-      print "-> Computed path contains %d elements" % len(result.path)
-      model = BronchoscopyPathModel(result.path, self.fiducialNode)
-      print "-> Model created"
-
-      slicer.mrmlScene.RemoveNode(self.fiducialNode)
-      markupNodes = slicer.mrmlScene.GetNodesByClass('vtkMRMLMarkupsFiducialNode')
-      numberOfMarkupNode = markupNodes.GetNumberOfItems()
-      lastMarkupNode = markupNodes.GetItemAsObject(numberOfMarkupNode-1)
-      markupLogic = slicer.modules.markups.logic()
-      markupLogic.SetActiveListID(lastMarkupNode)"""
+  def extractCenterline(self,labelVolume):
 
     if self.fiducialListSelector.currentNode():  # if a fiducial list was already uploaded, all that follows is not necessary!
       self.fiducialNode = self.fiducialListSelector.currentNode()
@@ -440,23 +409,10 @@ class BronchoscopyWidget:
       self.CreateFiducialsCenterline(self.points, self.fiducialNode)
 
     self.fiducialNode.SetDisplayVisibility(0)
-    self.MatlabTrackButton.enabled = True
+    self.ProbeTrackButton.enabled = True
 
     return True
 
-  def delayDisplay(self,message,msec=1000):
-    #
-    # logic version of delay display
-    #
-    print(message)
-    self.info = qt.QDialog()
-    self.infoLayout = qt.QVBoxLayout()
-    self.info.setLayout(self.infoLayout)
-    self.label = qt.QLabel(message,self.info)
-    self.infoLayout.addWidget(self.label)
-    qt.QTimer.singleShot(msec, self.info.close)
-    self.info.exec_()
-  
   def CreateFiducialsCenterline(self, centerlinePoints, fiducialList):
 
     NoP = centerlinePoints.GetNumberOfPoints()
@@ -472,9 +428,9 @@ class BronchoscopyWidget:
 
     #fiducialList.SetDisplayVisibility(0)
 
-  def Smoothing(self, pathModel, modelPoints, iterationsNumber):
+  def Smoothing(self, centModel, modelPoints, iterationsNumber):
     
-    NumberOfCells = pathModel.GetNumberOfCells()
+    NumberOfCells = centModel.GetNumberOfCells()
 
     pointsList = []
     distancePointsAbove = []
@@ -484,7 +440,7 @@ class BronchoscopyWidget:
       if iteration == 0:
         centralPoint = [0,0,0]
         for i in range(NumberOfCells-10,10,-10):
-          cell = pathModel.GetCell(i)
+          cell = centModel.GetCell(i)
           points = cell.GetPoints()
           if points.GetNumberOfPoints() % 2 == 0:
             centralPointPosition = points.GetNumberOfPoints()/2
@@ -661,17 +617,150 @@ class BronchoscopyWidget:
     
     #self.polydata = centerlineSmoothing.GetOutput()
 
+################################### Create Path Between Points ######################################## 
+
+  def onPathCreationButton(self):
+    # Disable Buttons
+    self.pathCreated = 1
+    self.ExtractCenterlineButton.enabled = False
+    self.PathCreationButton.enabled = False
+    self.ProbeTrackButton.enabled = False
+    self.inputSelector.enabled = False
+    self.labelSelector.enabled = False
+    self.fiducialListSelector.enabled = False
+    
+    # Create Centerline Path 
+    self.pathComputation(self.inputSelector.currentNode(), self.pointsListSelector.currentNode()) 
+    
+    # Enable Buttons Again
+    self.ExtractCenterlineButton.enabled = True
+    self.PathCreationButton.enabled = True
+    self.ProbeTrackButton.enabled = True
+    self.inputSelector.enabled = True
+    self.labelSelector.enabled = True
+    self.fiducialListSelector.enabled = True
+
+    # Update GUI
+    self.updateGUI()
+
+  def pathComputation(self, inputModel, points):
+    """
+    Run the actual algorithm to create the path between the 2 fiducials
+    """
+    import vtkSlicerCenterlineExtractionModuleLogic
+
+    #if( fiducials.GetNumberOfMarkups() > 2 ):
+        #return False
+    
+    '''modelNodes = slicer.mrmlScene.GetNodesByClass('vtkMRMLModelNode')
+    for n in xrange( modelNodes.GetNumberOfItems() ):
+      node = modelNodes.GetItemAsObject(n)
+      nodeName = node.GetName()
+      replaceName = nodeName.replace('-', ' - ')
+      splitName = replaceName.split()
+      for item in splitName:
+        if (item == 'Path') or (item == 'Cursor') or (item == 'Transform'):
+          slicer.mrmlScene.RemoveNode(node)'''
+                 
+    inputPolyData = inputModel.GetPolyData()
+
+    sourcePosition = [0,0,0]
+    points.GetNthFiducialPosition(0,sourcePosition)
+
+    source = inputPolyData.FindPoint(sourcePosition)
+
+    sourceId = vtk.vtkIdList()
+    sourceId.SetNumberOfIds(1) 
+    sourceId.InsertId(0,source)
+
+    targetPosition = [0,0,0]
+    targetId = vtk.vtkIdList()
+    targetId.SetNumberOfIds(points.GetNumberOfFiducials()-1) 
+      
+    for i in range(1, points.GetNumberOfFiducials()):
+      points.GetNthFiducialPosition(i,targetPosition)
+ 
+      target = inputPolyData.FindPoint(targetPosition)
+      targetId.InsertId(i-1,target)
+
+    pathCreation = vtkSlicerCenterlineExtractionModuleLogic.vtkvmtkPolyDataCenterlines()
+
+    # Multiple paths for different ROIs are created!
+
+    for t in xrange(targetId.GetNumberOfIds()):
+
+      tempTargetId = vtk.vtkIdList()
+      tempTargetId.SetNumberOfIds(1)
+      tempTargetId.InsertId(0,targetId.GetId(t))
+
+      pathCreation.SetInputData(inputPolyData)
+      pathCreation.SetSourceSeedIds(sourceId)
+      pathCreation.SetTargetSeedIds(tempTargetId)
+      pathCreation.SetRadiusArrayName('MaximumInscribedSphereRadius')
+      pathCreation.SimplifyVoronoiOff();
+      pathCreation.CenterlineResamplingOn()
+      pathCreation.SetCostFunction('1/R')
+      pathCreation.GenerateDelaunayTessellationOn()
+      pathCreation.Update()
+    
+      self.createdPath = pathCreation.GetOutput()
+
+      self.pathFiducialsNode = slicer.vtkMRMLMarkupsFiducialNode()
+      self.pathFiducialsNode.SetName('pathFiducials')
+      slicer.mrmlScene.AddNode(self.pathFiducialsNode)
+    
+      self.CreateFiducialsPath(self.createdPath, self.pathFiducialsNode)
+      model = BronchoscopyPathModel(self.pathFiducialsNode)
+      
+      #slicer.mrmlScene.RemoveNode(self.pathFiducialsNode)
+      markupLogic = slicer.modules.markups.logic()
+      markupLogic.SetActiveListID(points)
+      self.pathFiducialsNode = None
+      self.createdPath = None
+
+    return True
+
+  def CreateFiducialsPath(self, pathPolyData, fiducialList):
+    NoP = pathPolyData.GetNumberOfPoints()    
+    NthFiducial = 0
+    point = [0,0,0]
+    for i in xrange(NoP):
+      pathPolyData.GetPoint(i,point)
+      fiducialList.AddFiducial(point[0],point[1],point[2])
+      NthFiducial += 1
+
+    fiducialList.SetDisplayVisibility(0)
+     
+
+  def delayDisplay(self,message,msec=1000):
+    #
+    # logic version of delay display
+    #
+    print(message)
+    self.info = qt.QDialog()
+    self.infoLayout = qt.QVBoxLayout()
+    self.info.setLayout(self.infoLayout)
+    self.label = qt.QLabel(message,self.info)
+    self.infoLayout.addWidget(self.label)
+    qt.QTimer.singleShot(msec, self.info.close)
+    self.info.exec_()
+  
+
+
 ############################# SENSOR TRACKING #################################
 
-  def onMatlabTrackButtonToggled(self, checked):     
+  def onProbeTrackButtonToggled(self, checked):     
     if checked:
       if self.fiducialListSelector.currentNode():
         self.fiducialNode = self.fiducialListSelector.currentNode()
         self.fiducialNode.SetDisplayVisibility(0)
-  
-      self.CreatePathButton.enabled = False
 
-      self.MatlabTrackButton.text = "Stop Tracking"
+      self.ExtractCenterlineButton.enabled = False
+      self.inputSelector.enabled = False
+      self.labelSelector.enabled = False
+      self.fiducialListSelector.enabled = False
+
+      self.ProbeTrackButton.text = "Stop Tracking"
 
       if self.cNode == None:
         cNodes = slicer.mrmlScene.GetNodesByName('ProbeConnector')
@@ -687,6 +776,7 @@ class BronchoscopyWidget:
       self.cNode.Start()
 
       ################## This turns the probe of 90 degrees #####################
+
       if self.probeCalibrationTransform == None:
         calibrationTransformNodes = slicer.mrmlScene.GetNodesByName('probeCalibrationTransform')
         if calibrationTransformNodes.GetNumberOfItems() == 0:
@@ -736,6 +826,9 @@ class BronchoscopyWidget:
             self.cameraForNavigation.SetPosition(-1.0,-0.0,0.0)
             self.cameraForNavigation.SetFocalPoint(-6.0,0.0,0.0)
             self.cameraForNavigation.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
+          else:
+            self.cameraForNavigation.SetPosition(-1.0,-0.0,0.0)
+            self.cameraForNavigation.SetFocalPoint(-6.0,0.0,0.0)
 
       lm = slicer.app.layoutManager()
       yellowWidget = lm.sliceWidget('Yellow')
@@ -747,16 +840,19 @@ class BronchoscopyWidget:
 
       self.sensorTimer.start()
        
-    else:
+    else:  # When button is released...
       self.sensorTimer.stop()
       self.cNode.Stop()
       #self.cNode = None
       #self.cameraForNavigation = None
       #self.probeCalibrationTransform = None
-      self.CreatePathButton.enabled = True
 
-      self.CreatePathButton.enabled = True
-      self.MatlabTrackButton.text = "Track Sensor"
+      self.ExtractCenterlineButton.enabled = True
+      self.inputSelector.enabled = True
+      self.labelSelector.enabled = True
+      self.fiducialListSelector.enabled = True
+
+      self.ProbeTrackButton.text = "Track Sensor"
 
   def ReadPosition(self):
       if self.cNode.GetState() == 2:
@@ -791,6 +887,15 @@ class BronchoscopyWidget:
       s = [fiducialPos[0],fiducialPos[1],fiducialPos[2]]
       fiducialsList.append(s)
 
+    if self.pathCreated == 1:
+      pathFiducialsCollection = slicer.mrmlScene.GetNodesByName('pathFiducials')
+      for j in xrange(pathFiducialsCollection.GetNumberOfItems()):
+        fidNode = pathFiducialsCollection.GetItemAsObject(j)
+        for n in xrange(fidNode.GetNumberOfFiducials()):
+          fidNode.GetNthFiducialPosition(n,fiducialPos)
+          s = [fiducialPos[0],fiducialPos[1],fiducialPos[2]]
+          fiducialsList.append(s)
+
     originalCoord = [0,0,0]
     originalCoord[0] = tMatrix.GetElement(0,3)
     originalCoord[1] = tMatrix.GetElement(1,3)
@@ -823,140 +928,95 @@ class BronchoscopyWidget:
 
     self.centerlineCompensationTransform.SetMatrixTransformToParent(tMatrix)
 
-class BronchoscopyComputePath:
-  """Compute path given a list of fiducials. 
-  A Hermite spline interpolation is used. See http://en.wikipedia.org/wiki/Cubic_Hermite_spline
-  
-  Example:
-    result = BronchoscopyComputePath(fiducialListNode)
-    print "computer path has %d elements" % len(result.path)
-    
+class BronchoscopyPathModel:
+  """Create a vtkPolyData for a polyline:
+       - Add one point per path point.
+       - Add a single polyline
   """
+  def __init__(self, fiducialListNode):
   
-  def __init__(self, fiducialListNode, dl = 0.5):
+    fids = fiducialListNode
+    scene = slicer.mrmlScene
     
-    self.dl = dl # desired world space step size (in mm)
-    self.dt = dl # current guess of parametric stepsize
-    self.fids = fiducialListNode
+    points = vtk.vtkPoints()
+    self.polyData = vtk.vtkPolyData()
+    self.polyData.SetPoints(points)
 
-    # hermite interpolation functions
-    self.h00 = lambda t: 2*t**3 - 3*t**2     + 1
-    self.h10 = lambda t:   t**3 - 2*t**2 + t
-    self.h01 = lambda t:-2*t**3 + 3*t**2
-    self.h11 = lambda t:   t**3 -   t**2
+    lines = vtk.vtkCellArray()
+    self.polyData.SetLines(lines)
+    linesIDArray = lines.GetData()
+    linesIDArray.Reset()
+    linesIDArray.InsertNextTuple1(0)
 
-    # n is the number of control points in the piecewise curve
+    polygons = vtk.vtkCellArray()
+    self.polyData.SetPolys( polygons )
+    idArray = polygons.GetData()
+    idArray.Reset()
+    idArray.InsertNextTuple1(0)
 
-    if self.fids.GetClassName() == "vtkMRMLAnnotationHierarchyNode":
-      # slicer4 style hierarchy nodes
-      collection = vtk.vtkCollection()
-      self.fids.GetChildrenDisplayableNodes(collection)
-      self.n = collection.GetNumberOfItems()
-      if self.n == 0: 
-        return
-      self.p = numpy.zeros((self.n,3))
-      for i in xrange(self.n):
-        f = collection.GetItemAsObject(i)
-        coords = [0,0,0]
-        f.GetFiducialCoordinates(coords)
-        self.p[i] = coords
-    elif self.fids.GetClassName() == "vtkMRMLMarkupsFiducialNode":
-      # slicer4 Markups node
-      self.n = self.fids.GetNumberOfFiducials()
-      n = self.n
-      if n == 0:
-        return
-      # get fiducial positions
-      # sets self.p
-      self.p = numpy.zeros((n,3))
-      for i in xrange(n):
-        coord = [0.0, 0.0, 0.0]
-        self.fids.GetNthFiducialPosition(i, coord)
-        self.p[i] = coord
+    """for point in path:
+      pointIndex = points.InsertNextPoint(*point)
+      linesIDArray.InsertNextTuple1(pointIndex)
+      linesIDArray.SetTuple1( 0, linesIDArray.GetNumberOfTuples() - 1 )
+      lines.SetNumberOfCells(1)"""
+    index = [0,0,0]
+ 
+    for n in xrange(0,fiducialListNode.GetNumberOfFiducials()):
+      fiducialListNode.GetNthFiducialPosition(n,index)
+      pointIndex = points.InsertNextPoint(index)
+      linesIDArray.InsertNextTuple1(pointIndex)
+      linesIDArray.SetTuple1( 0, linesIDArray.GetNumberOfTuples() - 1 )
+      lines.SetNumberOfCells(1)
+
+    self.Smoothing(self.polyData)
+
+    # Create model node
+    model = slicer.vtkMRMLModelNode()
+    model.SetScene(scene)
+    model.SetName(scene.GenerateUniqueName("Path-%s" % fids.GetName()))
+    model.SetAndObservePolyData(self.polyData)
+
+    # Create display node
+    modelDisplay = slicer.vtkMRMLModelDisplayNode()
+    modelDisplay.SetColor(1,1,0) # yellow
+    modelDisplay.SetScene(scene)
+    scene.AddNode(modelDisplay)
+    model.SetAndObserveDisplayNodeID(modelDisplay.GetID())
+
+    # Add to scene
+    if vtk.VTK_MAJOR_VERSION <= 5:
+      # shall not be needed.
+      modelDisplay.SetInputPolyData(model.GetPolyData())
+    scene.AddNode(model)
+
+  def Smoothing(self, pathModel):
+      
+    import vtkSlicerCenterlineExtractionModuleLogic
+    
+    NumberOfPoints = pathModel.GetNumberOfPoints()
+    position = NumberOfPoints-1
+    startingPoint = [0,0,0]
+    pathModel.GetPoint(position,startingPoint)
+    #print "Starting point centerline: ",startingPoint
+    targetPosition=[0,0,0]
+    pathModel.GetPoint(1,targetPosition)
+           
+    squaredDist = vtk.vtkMath.Distance2BetweenPoints(startingPoint,targetPosition)
+    #print squaredDist 
+    
+    if (squaredDist < 10.000) :
+      smoothfactor=1
+      iterations=1000
+      #print iterations
     else:
-      # slicer3 style fiducial lists
-      self.n = self.fids.GetNumberOfFiducials()
-      n = self.n
-      if n == 0:
-        return
-      # get control point data
-      # sets self.p
-      self.p = numpy.zeros((n,3))
-      for i in xrange(n):
-        self.p[i] = self.fids.GetNthFiducialXYZ(i)
+      smoothfactor=1
+      iterations=10
+      #print iterations
 
-    # calculate the tangent vectors
-    # - fm is forward difference
-    # - m is average of in and out vectors
-    # - first tangent is out vector, last is in vector
-    # - sets self.m
-    n = self.n
-    fm = numpy.zeros((n,3))
-    for i in xrange(0,n-1):
-      fm[i] = self.p[i+1] - self.p[i]
-    self.m = numpy.zeros((n,3))
-    for i in xrange(1,n-1):
-      self.m[i] = (fm[i-1] + fm[i]) / 2.
-    self.m[0] = fm[0]
-    self.m[n-1] = fm[n-2]
-
-    self.path = [self.p[0]]
-    self.calculatePath()
-
-  def calculatePath(self):
-    """ Generate a flight path for of steps of length dl """
-    #
-    # calculate the actual path
-    # - take steps of self.dl in world space
-    # -- if dl steps into next segment, take a step of size "remainder" in the new segment
-    # - put resulting points into self.path
-    #
-    n = self.n
-    segment = 0 # which first point of current segment
-    t = 0 # parametric current parametric increment
-    remainder = 0 # how much of dl isn't included in current step
-    while segment < n-1:
-      t, p, remainder = self.step(segment, t, self.dl)
-      if remainder != 0 or t == 1.:
-        segment += 1
-        t = 0
-        if segment < n-1:
-          t, p, remainder = self.step(segment, t, remainder)
-      self.path.append(p)
-
-  def point(self,segment,t):
-    return (self.h00(t)*self.p[segment] + 
-              self.h10(t)*self.m[segment] + 
-              self.h01(t)*self.p[segment+1] + 
-              self.h11(t)*self.m[segment+1])
-
-  def step(self,segment,t,dl):
-    """ Take a step of dl and return the path point and new t
-      return:
-      t = new parametric coordinate after step 
-      p = point after step
-      remainder = if step results in parametic coordinate > 1.0, then
-        this is the amount of world space not covered by step
-    """
-    import numpy.linalg
-    p0 = self.path[self.path.__len__() - 1] # last element in path
-    remainder = 0
-    ratio = 100
-    count = 0
-    while abs(1. - ratio) > 0.05:
-      t1 = t + self.dt
-      pguess = self.point(segment,t1)
-      dist = numpy.linalg.norm(pguess - p0)
-      ratio = self.dl / dist
-      self.dt *= ratio
-      if self.dt < 0.00000001:
-        return
-      count += 1
-      if count > 500:
-        return (t1, pguess, 0)
-    if t1 > 1.:
-      t1 = 1.
-      p1 = self.point(segment, t1)
-      remainder = numpy.linalg.norm(p1 - pguess)
-      pguess = p1
-    return (t1, pguess, remainder)
+    centerlineSmoothing = vtkSlicerCenterlineExtractionModuleLogic.vtkvmtkCenterlineSmoothing()
+    centerlineSmoothing.SetInputData(pathModel)
+    centerlineSmoothing.SetNumberOfSmoothingIterations(iterations)
+    centerlineSmoothing.SetSmoothingFactor(smoothfactor)
+    centerlineSmoothing.Update()
+    
+    self.polyData = centerlineSmoothing.GetOutput()
