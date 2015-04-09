@@ -160,7 +160,7 @@ class BronchoscopyWidget:
     self.fiducialListSelector.selectNodeUponCreation = True
     self.fiducialListSelector.addEnabled = False
     self.fiducialListSelector.removeEnabled = True
-    self.fiducialListSelector.noneEnabled = False
+    self.fiducialListSelector.noneEnabled = True
     self.fiducialListSelector.showHidden = False
     self.fiducialListSelector.showChildNodeTypes = False
     self.fiducialListSelector.setMRMLScene( slicer.mrmlScene )
@@ -183,7 +183,7 @@ class BronchoscopyWidget:
     self.pointsListSelector.selectNodeUponCreation = True
     self.pointsListSelector.addEnabled = False
     self.pointsListSelector.removeEnabled = True
-    self.pointsListSelector.noneEnabled = False
+    self.pointsListSelector.noneEnabled = True
     self.pointsListSelector.showHidden = False
     self.pointsListSelector.showChildNodeTypes = False
     self.pointsListSelector.setMRMLScene( slicer.mrmlScene )
@@ -649,8 +649,8 @@ class BronchoscopyWidget:
     """
     import vtkSlicerCenterlineExtractionModuleLogic
 
-    #if( fiducials.GetNumberOfMarkups() > 2 ):
-        #return False
+    if( points.GetNumberOfMarkups() > 10 ):
+      return False
     
     '''modelNodes = slicer.mrmlScene.GetNodesByClass('vtkMRMLModelNode')
     for n in xrange( modelNodes.GetNumberOfItems() ):
@@ -705,20 +705,52 @@ class BronchoscopyWidget:
     
       self.createdPath = pathCreation.GetOutput()
 
+      self.pathSmoothing(self.createdPath)
+
       self.pathFiducialsNode = slicer.vtkMRMLMarkupsFiducialNode()
       self.pathFiducialsNode.SetName('pathFiducials')
       slicer.mrmlScene.AddNode(self.pathFiducialsNode)
-    
+
       self.CreateFiducialsPath(self.createdPath, self.pathFiducialsNode)
       model = BronchoscopyPathModel(self.pathFiducialsNode)
       
       #slicer.mrmlScene.RemoveNode(self.pathFiducialsNode)
       markupLogic = slicer.modules.markups.logic()
       markupLogic.SetActiveListID(points)
-      self.pathFiducialsNode = None
-      self.createdPath = None
+      #self.pathFiducialsNode = None
+      #self.createdPath = None
 
     return True
+     
+  def pathSmoothing(self, pathModel):
+      
+    import vtkSlicerCenterlineExtractionModuleLogic
+    
+    NumberOfPoints = pathModel.GetNumberOfPoints()
+    position = NumberOfPoints-1
+    startingPoint = [0,0,0]
+    pathModel.GetPoint(position,startingPoint)
+    #print "Starting point centerline: ",startingPoint
+    targetPosition=[0,0,0]
+    pathModel.GetPoint(1,targetPosition)
+           
+    squaredDist = vtk.vtkMath.Distance2BetweenPoints(startingPoint,targetPosition)
+    #print squaredDist 
+    
+    if (squaredDist < 10.000) :
+      smoothfactor = 1
+      iterations = 1000
+    else:
+      smoothfactor = 1
+      iterations = 100
+      
+    centerlineSmoothing = vtkSlicerCenterlineExtractionModuleLogic.vtkvmtkCenterlineSmoothing()
+    centerlineSmoothing.SetInputData(pathModel)
+    centerlineSmoothing.SetNumberOfSmoothingIterations(iterations)
+    centerlineSmoothing.SetSmoothingFactor(smoothfactor)
+    centerlineSmoothing.Update()
+    
+    self.createdPath = centerlineSmoothing.GetOutput()
 
   def CreateFiducialsPath(self, pathPolyData, fiducialList):
     NoP = pathPolyData.GetNumberOfPoints()    
@@ -730,7 +762,6 @@ class BronchoscopyWidget:
       NthFiducial += 1
 
     fiducialList.SetDisplayVisibility(0)
-     
 
   def delayDisplay(self,message,msec=1000):
     #
@@ -882,10 +913,11 @@ class BronchoscopyWidget:
       fiducialNodesCollection = slicer.mrmlScene.GetNodesByName('CenterlineFiducials')
       self.fiducialNode = fiducialNodesCollection.GetItemAsObject(0)
 
-    for i in xrange(self.fiducialNode.GetNumberOfFiducials()):
-      self.fiducialNode.GetNthFiducialPosition(i,fiducialPos)
-      s = [fiducialPos[0],fiducialPos[1],fiducialPos[2]]
-      fiducialsList.append(s)
+    if self.fiducialNode:
+      for i in xrange(self.fiducialNode.GetNumberOfFiducials()):
+        self.fiducialNode.GetNthFiducialPosition(i,fiducialPos)
+        s = [fiducialPos[0],fiducialPos[1],fiducialPos[2]]
+        fiducialsList.append(s)
 
     if self.pathCreated == 1:
       pathFiducialsCollection = slicer.mrmlScene.GetNodesByName('pathFiducials')
@@ -968,7 +1000,7 @@ class BronchoscopyPathModel:
       linesIDArray.SetTuple1( 0, linesIDArray.GetNumberOfTuples() - 1 )
       lines.SetNumberOfCells(1)
 
-    self.Smoothing(self.polyData)
+    #self.pathSmoothing(self.polyData)
 
     # Create model node
     model = slicer.vtkMRMLModelNode()
@@ -988,35 +1020,3 @@ class BronchoscopyPathModel:
       # shall not be needed.
       modelDisplay.SetInputPolyData(model.GetPolyData())
     scene.AddNode(model)
-
-  def Smoothing(self, pathModel):
-      
-    import vtkSlicerCenterlineExtractionModuleLogic
-    
-    NumberOfPoints = pathModel.GetNumberOfPoints()
-    position = NumberOfPoints-1
-    startingPoint = [0,0,0]
-    pathModel.GetPoint(position,startingPoint)
-    #print "Starting point centerline: ",startingPoint
-    targetPosition=[0,0,0]
-    pathModel.GetPoint(1,targetPosition)
-           
-    squaredDist = vtk.vtkMath.Distance2BetweenPoints(startingPoint,targetPosition)
-    #print squaredDist 
-    
-    if (squaredDist < 10.000) :
-      smoothfactor=1
-      iterations=1000
-      #print iterations
-    else:
-      smoothfactor=1
-      iterations=10
-      #print iterations
-
-    centerlineSmoothing = vtkSlicerCenterlineExtractionModuleLogic.vtkvmtkCenterlineSmoothing()
-    centerlineSmoothing.SetInputData(pathModel)
-    centerlineSmoothing.SetNumberOfSmoothingIterations(iterations)
-    centerlineSmoothing.SetSmoothingFactor(smoothfactor)
-    centerlineSmoothing.Update()
-    
-    self.polyData = centerlineSmoothing.GetOutput()
