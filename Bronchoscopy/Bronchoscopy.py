@@ -417,16 +417,16 @@ class BronchoscopyWidget:
 
     NoP = centerlinePoints.GetNumberOfPoints()
     
-    NthFiducial = 0
+    #NthFiducial = 0
     point = [0,0,0]
 
     for i in range(0, NoP):
       centerlinePoints.GetPoint(i,point)
       fiducialList.AddFiducial(point[0],point[1],point[2])
       #fiducialList.SetNthMarkupVisibility(NthFiducial,0)
-      NthFiducial += 1
+      #NthFiducial += 1
 
-    #fiducialList.SetDisplayVisibility(0)
+    fiducialList.SetDisplayVisibility(0)
 
   def Smoothing(self, centModel, modelPoints, iterationsNumber):
     
@@ -790,6 +790,7 @@ class BronchoscopyWidget:
       self.inputSelector.enabled = False
       self.labelSelector.enabled = False
       self.fiducialListSelector.enabled = False
+      self.PathCreationButton.enabled = False
 
       self.ProbeTrackButton.text = "Stop Tracking"
 
@@ -837,8 +838,26 @@ class BronchoscopyWidget:
       needleModelNodes = slicer.mrmlScene.GetNodesByName('ProbeModel')
       if needleModelNodes.GetNumberOfItems() > 0:
         probeNode = needleModelNodes.GetItemAsObject(0)
+        probeDisplayNode = probeNode.GetDisplayNode()
+        probeDisplayNode.SetColor(0.4, 1.0, 0.0)
+        probeDisplayNode.SetSliceIntersectionVisibility(1)
+        probeDisplayNode.SetSliceIntersectionThickness(4)
+
+        ########### A fiducial is created to indicate the position of the probe in saggital, coronal and axial views #########
+
+        #probePositionIndicator = slicer.vtkMRMLMarkupsFiducialNode()
+        #probePositionIndicator.SetName('ProbePositionIndicator')
+        #slicer.mrmlScene.AddNode(probePositionIndicator)
+        # The fiducial is placed on the tip of the probe
+        #probePositionIndicator.AddFiducial(-1.0,-0.0,0.0)
+        #probeIndicatorDisplayNode = probePositionIndicator.GetDisplayNode()
+        #probeIndicatorDisplayNode.SetGlyphScale(6.0)
+        #probeIndicatorDisplayNode.SetGlyphType(10)
+        #probeIndicatorDisplayNode.SetTextScale(0.0)
+
         if probeNode.GetTransformNodeID() == None:
           probeNode.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
+          #probePositionIndicator.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
 
       ################## Camera is connected to the transform #####################
 
@@ -882,6 +901,7 @@ class BronchoscopyWidget:
       self.inputSelector.enabled = True
       self.labelSelector.enabled = True
       self.fiducialListSelector.enabled = True
+      self.PathCreationButton.enabled = True
 
       self.ProbeTrackButton.text = "Track Sensor"
 
