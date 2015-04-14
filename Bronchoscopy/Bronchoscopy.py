@@ -630,7 +630,7 @@ class BronchoscopyWidget:
    # }
 
 
-    #import vtkSlicerCenterlineExtractionModuleLogic
+    #import vtkSlicerVMTKFunctionalitiesModuleLogic
 
     #NumberOfPoints = pathModel.GetNumberOfPoints()
     #print NumberOfPoints
@@ -653,7 +653,7 @@ class BronchoscopyWidget:
      # iterations=10
       #print iterations
 
-    #centerlineSmoothing = vtkSlicerCenterlineExtractionModuleLogic.vtkvmtkCenterlineSmoothing()
+    #centerlineSmoothing = vtkSlicerVMTKFunctionalitiesModuleLogic.vtkvmtkCenterlineSmoothing()
     #centerlineSmoothing.SetInputData(pathModel)
     #centerlineSmoothing.SetNumberOfSmoothingIterations(iterations)
     #centerlineSmoothing.SetSmoothingFactor(smoothfactor)
@@ -695,7 +695,7 @@ class BronchoscopyWidget:
     """
     Run the actual algorithm to create the path between the 2 fiducials
     """
-    import vtkSlicerCenterlineExtractionModuleLogic
+    import vtkSlicerVMTKFunctionalitiesModuleLogic
 
     if( points.GetNumberOfMarkups() > 10 ):
       return False
@@ -731,7 +731,7 @@ class BronchoscopyWidget:
       target = inputPolyData.FindPoint(targetPosition)
       targetId.InsertId(i-1,target)
 
-    pathCreation = vtkSlicerCenterlineExtractionModuleLogic.vtkvmtkPolyDataCenterlines()
+    pathCreation = vtkSlicerVMTKFunctionalitiesModuleLogic.vtkvmtkPolyDataCenterlines()
 
     # Multiple paths for different ROIs are created!
 
@@ -772,7 +772,7 @@ class BronchoscopyWidget:
      
   def pathSmoothing(self, pathModel):
       
-    import vtkSlicerCenterlineExtractionModuleLogic
+    import vtkSlicerVMTKFunctionalitiesModuleLogic
     
     NumberOfPoints = pathModel.GetNumberOfPoints()
     position = NumberOfPoints-1
@@ -792,7 +792,7 @@ class BronchoscopyWidget:
       smoothfactor = 1
       iterations = 100
       
-    centerlineSmoothing = vtkSlicerCenterlineExtractionModuleLogic.vtkvmtkCenterlineSmoothing()
+    centerlineSmoothing = vtkSlicerVMTKFunctionalitiesModuleLogic.vtkvmtkCenterlineSmoothing()
     centerlineSmoothing.SetInputData(pathModel)
     centerlineSmoothing.SetNumberOfSmoothingIterations(iterations)
     centerlineSmoothing.SetSmoothingFactor(smoothfactor)
