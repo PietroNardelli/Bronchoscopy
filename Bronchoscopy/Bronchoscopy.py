@@ -858,6 +858,7 @@ class BronchoscopyWidget:
       self.cNode.SetTypeServer(18944)
       self.cNode.Start()
 
+      self.resetCamera()
       ################## This turns the probe of 90 degrees #####################
 
       if self.probeCalibrationTransform == None:
@@ -913,9 +914,8 @@ class BronchoscopyWidget:
           #probePositionIndicator.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
 
       ################## Camera is connected to the transform #####################
-
-      self.resetCamera()
-
+      self.cameraForNavigation.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
+ 
       lm = slicer.app.layoutManager()
       yellowWidget = lm.sliceWidget('Yellow')
       self.yellowLogic = yellowWidget.sliceLogic()
@@ -972,7 +972,6 @@ class BronchoscopyWidget:
       if self.cameraForNavigation.GetTransformNodeID() == None:
         self.cameraForNavigation.SetPosition(-1.0,0.0,0.0)
         self.cameraForNavigation.SetFocalPoint(-6.0,0.0,0.0)
-        self.cameraForNavigation.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
       else:
         tNodeCollections = slicer.mrmlScene.GetNodesByName('centerlineCompensationTransform')
         if tNodeCollections.GetNumberOfItems() > 0:
