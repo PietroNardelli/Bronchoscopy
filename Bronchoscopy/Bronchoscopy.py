@@ -45,6 +45,8 @@ class BronchoscopyWidget:
     self.sensorTimer.setInterval(1)
     self.sensorTimer.connect('timeout()', self.ReadPosition)
 
+    self.points = vtk.vtkPoints()
+    self.pointsList = []
     self.fiducialNode = None
     self.path = None
 
@@ -55,8 +57,6 @@ class BronchoscopyWidget:
     self.cameraForNavigation = None
     self.cNode = None
     self.probeToTrackerTransformNode = None
-
-    self.lastFocalPoint = [-6.0,0.0,0.0]
 
     self.updateGUI()
 
@@ -440,37 +440,26 @@ class BronchoscopyWidget:
       self.centerlineModel.SetDisplayVisibility(0)
 
       # create fiducial list
-      self.fiducialNode = slicer.vtkMRMLMarkupsFiducialNode()
-      self.fiducialNode.SetName('CenterlineFiducials')
-      slicer.mrmlScene.AddNode(self.fiducialNode)
+      #self.fiducialNode = slicer.vtkMRMLMarkupsFiducialNode()
+      #self.fiducialNode.SetName('CenterlineFiducials')
+      #slicer.mrmlScene.AddNode(self.fiducialNode)
 
       centerlinePolydata = self.centerlineModel.GetPolyData()
-      self.points = vtk.vtkPoints()
 
       iterations = 5
       self.Smoothing(centerlinePolydata, self.points, iterations)
-      self.CreateFiducialsCenterline(self.points, self.fiducialNode)
 
-    self.fiducialNode.SetDisplayVisibility(0)
     self.ProbeTrackButton.enabled = True
     self.ResetCameraButton.enabled = True
 
+    if self.fiducialNode:
+      self.fiducialNode.SetDisplayVisibility(0)
+      for i in xrange(self.fiducialNode.GetNumberOfFiducials()):
+        point = [0,0,0]
+        self.fiducialNode.GetNthFiducialPosition(i,point)
+        self.points.InsertNextPoint(point)
+
     return True
-
-  def CreateFiducialsCenterline(self, centerlinePoints, fiducialList):
-
-    NoP = centerlinePoints.GetNumberOfPoints()
-    
-    #NthFiducial = 0
-    point = [0,0,0]
-
-    for i in range(0, NoP):
-      centerlinePoints.GetPoint(i,point)
-      fiducialList.AddFiducial(point[0],point[1],point[2])
-      #fiducialList.SetNthMarkupVisibility(NthFiducial,0)
-      #NthFiducial += 1
-
-    fiducialList.SetDisplayVisibility(0)
 
   def Smoothing(self, centModel, modelPoints, iterationsNumber):
     
@@ -611,55 +600,7 @@ class BronchoscopyWidget:
         if iteration == 0:
           modelPoints.InsertNextPoint(actualPoint)
         else:
-          modelPoints.InsertPoint(n, actualPoint)    
-
-  #for (int i=0; i<numberOfIterations; i++)
-  #  {
-  #  for (int j=1; j<numberOfPoints-1; j++)
-  #    {
-  #    smoothLinePoints->GetPoint(j-1,point0);
-  #    smoothLinePoints->GetPoint(j  ,point1);
-  #    smoothLinePoints->GetPoint(j+1,point2);
-
-   #   point1[0] += relaxation * (0.5 * (point0[0] + point2[0]) - point1[0]);
-   #   point1[1] += relaxation * (0.5 * (point0[1] + point2[1]) - point1[1]);
-   #   point1[2] += relaxation * (0.5 * (point0[2] + point2[2]) - point1[2]);
-
-    #  smoothLinePoints->SetPoint(j,point1);
-    #  }
-   # }
-
-
-    #import vtkSlicerVMTKFunctionalitiesModuleLogic
-
-    #NumberOfPoints = pathModel.GetNumberOfPoints()
-    #print NumberOfPoints
-    #position = NumberOfPoints-1
-    #startingPoint = [0,0,0]
-    #pathModel.GetPoint(position,startingPoint)
-    #print "Starting point centerline: ",startingPoint
-    #targetPosition=[0,0,0]
-    #pathModel.GetPoint(1,targetPosition)
-           
-    #squaredDist = vtk.vtkMath.Distance2BetweenPoints(startingPoint,targetPosition)
-    #print squaredDist 
-    
-    #if (squaredDist < 10.000) :
-    #smoothfactor=1
-    #iterations=100
-      #print iterations
-   # else:
-     # smoothfactor=1
-     # iterations=10
-      #print iterations
-
-    #centerlineSmoothing = vtkSlicerVMTKFunctionalitiesModuleLogic.vtkvmtkCenterlineSmoothing()
-    #centerlineSmoothing.SetInputData(pathModel)
-    #centerlineSmoothing.SetNumberOfSmoothingIterations(iterations)
-    #centerlineSmoothing.SetSmoothingFactor(smoothfactor)
-    #centerlineSmoothing.Update()
-    
-    #self.polydata = centerlineSmoothing.GetOutput()
+          modelPoints.InsertPoint(n, actualPoint)
 
 ################################### Create Path Between Points ######################################## 
 
@@ -699,16 +640,6 @@ class BronchoscopyWidget:
 
     if( points.GetNumberOfMarkups() > 10 ):
       return False
-    
-    '''modelNodes = slicer.mrmlScene.GetNodesByClass('vtkMRMLModelNode')
-    for n in xrange( modelNodes.GetNumberOfItems() ):
-      node = modelNodes.GetItemAsObject(n)
-      nodeName = node.GetName()
-      replaceName = nodeName.replace('-', ' - ')
-      splitName = replaceName.split()
-      for item in splitName:
-        if (item == 'Path') or (item == 'Cursor') or (item == 'Transform'):
-          slicer.mrmlScene.RemoveNode(node)'''
                  
     inputPolyData = inputModel.GetPolyData()
 
@@ -859,8 +790,8 @@ class BronchoscopyWidget:
       self.cNode.Start()
 
       self.resetCamera()
-      ################## This turns the probe of 90 degrees #####################
 
+      ################## This turns the probe of 90 degrees when the tracking is started the first time #####################
       if self.probeCalibrationTransform == None:
         calibrationTransformNodes = slicer.mrmlScene.GetNodesByName('probeCalibrationTransform')
         if calibrationTransformNodes.GetNumberOfItems() == 0:
@@ -868,8 +799,8 @@ class BronchoscopyWidget:
           self.probeCalibrationTransform.SetName('probeCalibrationTransform')
           slicer.mrmlScene.AddNode(self.probeCalibrationTransform)
         else:
- 	  self.probeCalibrationTransform = calibrationTransformNodes.GetItemAsObject(0)
-            
+	  self.probeCalibrationTransform = calibrationTransformNodes.GetItemAsObject(0)
+
       calibrationMatrix = vtk.vtkMatrix4x4()
       self.probeCalibrationTransform.GetMatrixTransformToParent(calibrationMatrix)
       calibrationMatrix.SetElement(0,0,0)
@@ -924,6 +855,22 @@ class BronchoscopyWidget:
       greenWidget = lm.sliceWidget('Green')
       self.greenLogic = greenWidget.sliceLogic()
 
+      fiducialPos = [0,0,0]
+      if self.points:
+        for i in xrange(self.points.GetNumberOfPoints()):
+          point = self.points.GetPoint(i)
+          p = [point[0],point[1],point[2]]
+          self.pointsList.append(p)
+
+      if self.pathCreated == 1:
+        pathFiducialsCollection = slicer.mrmlScene.GetNodesByName('pathFiducials')
+        for j in xrange(pathFiducialsCollection.GetNumberOfItems()):
+          fidNode = pathFiducialsCollection.GetItemAsObject(j)
+          for n in xrange(fidNode.GetNumberOfFiducials()):
+            fidNode.GetNthFiducialPosition(n,fiducialPos)
+            s = [fiducialPos[0],fiducialPos[1],fiducialPos[2]]
+            self.pointsList.append(s)  
+
       self.sensorTimer.start()
        
     else:  # When button is released...
@@ -971,7 +918,7 @@ class BronchoscopyWidget:
     if cameraNodes.GetNumberOfItems() > 0:
       if self.cameraForNavigation.GetTransformNodeID() == None:
         self.cameraForNavigation.SetPosition(-1.0,0.0,0.0)
-        self.cameraForNavigation.SetFocalPoint(-6.0,0.0,0.0)
+        self.cameraForNavigation.SetFocalPoint(-10.0,0.0,0.0)
       else:
         tNodeCollections = slicer.mrmlScene.GetNodesByName('centerlineCompensationTransform')
         if tNodeCollections.GetNumberOfItems() > 0:
@@ -989,28 +936,11 @@ class BronchoscopyWidget:
    
   def CheckCurrentPosition(self, tMatrix):
 
-    fiducialPos = [0,0,0]
-    fiducialsList = []
     distance = []
 
-    if self.fiducialNode == None:
+    '''if self.fiducialNode == None:
       fiducialNodesCollection = slicer.mrmlScene.GetNodesByName('CenterlineFiducials')
-      self.fiducialNode = fiducialNodesCollection.GetItemAsObject(0)
-
-    if self.fiducialNode:
-      for i in xrange(self.fiducialNode.GetNumberOfFiducials()):
-        self.fiducialNode.GetNthFiducialPosition(i,fiducialPos)
-        s = [fiducialPos[0],fiducialPos[1],fiducialPos[2]]
-        fiducialsList.append(s)
-
-    if self.pathCreated == 1:
-      pathFiducialsCollection = slicer.mrmlScene.GetNodesByName('pathFiducials')
-      for j in xrange(pathFiducialsCollection.GetNumberOfItems()):
-        fidNode = pathFiducialsCollection.GetItemAsObject(j)
-        for n in xrange(fidNode.GetNumberOfFiducials()):
-          fidNode.GetNthFiducialPosition(n,fiducialPos)
-          s = [fiducialPos[0],fiducialPos[1],fiducialPos[2]]
-          fiducialsList.append(s)
+      self.fiducialNode = fiducialNodesCollection.GetItemAsObject(0)'''
 
     originalCoord = [0,0,0]
     originalCoord[0] = tMatrix.GetElement(0,3)
@@ -1019,9 +949,9 @@ class BronchoscopyWidget:
 
     originalCoord = numpy.asarray(originalCoord)
 
-    distance = ((fiducialsList-originalCoord)**2).sum(axis=1)
+    distance = ((self.pointsList-originalCoord)**2).sum(axis=1)
     ndx = distance.argsort()
-    closestPoint = fiducialsList[ndx[0]]
+    closestPoint = self.pointsList[ndx[0]]
 
     tMatrix.SetElement(0,3,closestPoint[0])
     tMatrix.SetElement(1,3,closestPoint[1])
@@ -1043,7 +973,6 @@ class BronchoscopyWidget:
     self.redLogic.SetSliceOffset(z)
 
     self.centerlineCompensationTransform.SetMatrixTransformToParent(tMatrix)
-    self.cameraForNavigation.GetFocalPoint(self.lastFocalPoint)
 
 class BronchoscopyPathModel:
   """Create a vtkPolyData for a polyline:
