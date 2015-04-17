@@ -159,6 +159,23 @@ class BronchoscopyWidget:
     self.fiducialListSelector.setMRMLScene( slicer.mrmlScene )
     self.fiducialListSelector.setToolTip( "Select centerline fiducial list already uploaded" )
     fiducialFormLayout.addRow("Centerline Fiducials List: ", self.fiducialListSelector)
+ 
+    ########################################################################################################
+    #### Optional Push Button To Create A List Of Fiducial Starting From The Extracted Centerline Points ###
+    ########################################################################################################
+
+    self.CreateFiducialListButton = qt.QPushButton("Create Fiducial List From Centerline")
+    self.CreateFiducialListButton.toolTip = "Create a list of fiducial points starting from the extracted cenetrline bof the 3D model."
+    self.CreateFiducialListButton.setFixedSize(240,25)
+    self.CreateFiducialListButton.checkable = True
+
+    if self.points.GetNumberOfPoints() > 0:
+      self.CreateFiducialListButton.enabled = True
+    else:
+      self.CreateFiducialListButton.enabled = False
+    box = qt.QVBoxLayout()
+    fiducialFormLayout.addRow(box)
+    box.addWidget(self.CreateFiducialListButton,0,4)
 
     ###################################################################################
     #########################  Extract Centerline Button  #############################
@@ -188,7 +205,8 @@ class BronchoscopyWidget:
     self.pointsListSelector = slicer.qMRMLNodeComboBox()
     self.pointsListSelector.nodeTypes = ( ("vtkMRMLMarkupsFiducialNode"), "" )
     self.pointsListSelector.selectNodeUponCreation = True
-    self.pointsListSelector.addEnabled = False
+    self.pointsListSelector.addEnabled = True
+    self.pointsListSelector.baseName = 'PathFiducial'
     self.pointsListSelector.removeEnabled = True
     self.pointsListSelector.noneEnabled = True
     self.pointsListSelector.showHidden = False
@@ -200,7 +218,7 @@ class BronchoscopyWidget:
     ###################################################################################
     #############################  Path Creation Button  ############################## 
     ###################################################################################
-    self.PathCreationButton = qt.QPushButton("Create Path")
+    self.PathCreationButton = qt.QPushButton("Create Path(s)")
     self.PathCreationButton.toolTip = "Run the algorithm to create the path between the specified points."
     self.PathCreationButton.setFixedSize(300,50)
     if self.inputSelector.currentNode() and self.pointsListSelector.currentNode():
@@ -264,6 +282,7 @@ class BronchoscopyWidget:
     self.PathCreationButton.connect('clicked(bool)', self.onPathCreationButton)
     self.ProbeTrackButton.connect('toggled(bool)', self.onProbeTrackButtonToggled)
     self.ResetCameraButton.connect('toggled(bool)',self.onResetCameraButtonToggled)
+    self.CreateFiducialListButton.connect('toggled(bool)',self.onCreateFiducialListToggled)
     
     #
     # Add Vertical Spacer
@@ -363,7 +382,9 @@ class BronchoscopyWidget:
     globals()[widgetName.lower()].setup()
     setattr(globals()['slicer'].modules, widgetName, globals()[widgetName.lower()])
 
-################################### Extract Centerline ######################################## 
+##################################################################################################
+################################### CENTERLINE EXTRACTION ######################################## 
+##################################################################################################
 
   def onExtractCenterlineButton(self):
     # Disable Buttons 
@@ -387,12 +408,26 @@ class BronchoscopyWidget:
     self.fiducialListSelector.enabled = True
     self.pointsListSelector.enabled = True
 
-    markupsNode = slicer.mrmlScene.GetNodesByClass('vtkMRMLMarkupsFiducialNode')
-    if markupsNode.GetNumberOfItems() > 0: 
-      markupsList = markupsNode.GetItemAsObject(0)
-      markupListID = markupsList.GetID()
+    if self.points.GetNumberOfPoints() > 0:
+      self.CreateFiducialListButton.enabled = True
+  
+    if self.fiducialNode:
+      FList = slicer.mrmlScene.GetNodesByName('F')
+      AirwayFiducialList = slicer.mrmlScene.GetNodesByName('AirwayFiducial')
+      PathFiducialList = slicer.mrmlScene.GetNodesByName('PathFiducial')
       markupLogic = slicer.modules.markups.logic()
-      markupLogic.SetActiveListID(markupsList)
+      if FList.GetNumberOfItems() > 0:  
+        markupsList = FList.GetItemAsObject(0)
+      elif AirwayFiducialList.GetNumberOfItems() > 0:
+        markupsList = AirwayFiducialList.GetItemAsObject(0)
+      elif PathFiducialList.GetNumberOfItems() > 0:
+        markupsList = PathFiducialList.GetItemAsObject(0)
+      else:
+        markupsList = slicer.vtkMRMLMarkupsFiducialNode()
+        markupsList.SetName('PathFiducial')
+        slicer.mrmlScene.AddNode(markupsList)
+      
+      markupLogic.SetActiveListID(markupsList)      
 
     # Update GUI
     self.updateGUI()
@@ -602,33 +637,84 @@ class BronchoscopyWidget:
         else:
           modelPoints.InsertPoint(n, actualPoint)
 
-################################### Create Path Between Points ######################################## 
+#######################################################################################################
+####################### Create A Fiducial List With A Fiducial On Each Point ##########################  
+#######################################################################################################
+
+  def onCreateFiducialListToggled(self, checked):
+    if checked:
+      self.CreateFiducialListButton.checked = False
+
+      # Disable Buttons Again
+      self.ExtractCenterlineButton.enabled = False
+      self.ProbeTrackButton.enabled = False
+      self.ResetCameraButton.enabled = False
+      self.inputSelector.enabled = False
+      self.labelSelector.enabled = False
+      self.fiducialListSelector.enabled = False
+      self.pointsListSelector.enabled = False
+
+      fNode = slicer.vtkMRMLMarkupsFiducialNode()
+      fNode.SetName('CenterlineFiducials')
+      slicer.mrmlScene.AddNode(fNode)
+      point = [0,0,0]
+      for i in xrange(self.points.GetNumberOfPoints()):
+        self.points.GetPoint(i,point)
+        fNode.AddFiducial(point[0],point[1],point[2])
+
+      fNode.SetDisplayVisibility(0)       
+   
+      # Enable Buttons Again
+      self.ExtractCenterlineButton.enabled = True
+      self.ProbeTrackButton.enabled = True
+      self.ResetCameraButton.enabled = True
+      self.inputSelector.enabled = True
+      self.labelSelector.enabled = True
+      self.fiducialListSelector.enabled = True
+      self.pointsListSelector.enabled = True
+
+
+#######################################################################################################
+########################################## PATH CREATION ############################################## 
+#######################################################################################################
 
   def onPathCreationButton(self):
-    # Disable Buttons
-    self.pathCreated = 1
-    self.ExtractCenterlineButton.enabled = False
-    self.PathCreationButton.enabled = False
-    self.ProbeTrackButton.enabled = False
-    self.ResetCameraButton.enabled = False
-    self.inputSelector.enabled = False
-    self.labelSelector.enabled = False
-    self.fiducialListSelector.enabled = False
-    self.pointsListSelector.enabled = False
-    
-    # Create Centerline Path 
-    self.pathComputation(self.inputSelector.currentNode(), self.pointsListSelector.currentNode()) 
-    
-    # Enable Buttons Again
-    self.ExtractCenterlineButton.enabled = True
-    self.PathCreationButton.enabled = True
-    self.ProbeTrackButton.enabled = True
-    self.ResetCameraButton.enabled = True
-    self.inputSelector.enabled = True
-    self.labelSelector.enabled = True
-    self.fiducialListSelector.enabled = True
-    self.pointsListSelector.enabled = True
+    fiducials = self.pointsListSelector.currentNode()
 
+    if fiducials.GetNumberOfFiducials() > 1 and fiducials.GetNumberOfFiducials() < 10:
+
+      # Disable Buttons
+      self.pathCreated = 1
+      self.ExtractCenterlineButton.enabled = False
+      self.PathCreationButton.enabled = False
+      self.ProbeTrackButton.enabled = False
+      self.ResetCameraButton.enabled = False
+      self.inputSelector.enabled = False
+      self.labelSelector.enabled = False
+      self.fiducialListSelector.enabled = False
+      self.pointsListSelector.enabled = False
+      self.CreateFiducialListButton.enabled = False
+
+      # Create Centerline Path 
+      self.pathComputation(self.inputSelector.currentNode(), self.pointsListSelector.currentNode()) 
+    
+      # Enable Buttons Again
+      self.ExtractCenterlineButton.enabled = True
+      self.PathCreationButton.enabled = True
+      self.ProbeTrackButton.enabled = True
+      self.ResetCameraButton.enabled = True
+      self.inputSelector.enabled = True
+      self.labelSelector.enabled = True
+      self.fiducialListSelector.enabled = True
+      self.pointsListSelector.enabled = True
+
+      if self.points.GetNumberOfPoints() > 0:
+        self.CreateFiducialListButton.enabled = True
+
+    else:
+      string = 'The selected path fiducial list contains ' + str(fiducials.GetNumberOfFiducials()) + ' fiducials. Number of fiducials in the list must be between 2 and 10.'
+      raise Exception(string)
+   
     # Update GUI
     self.updateGUI()
 
@@ -638,8 +724,8 @@ class BronchoscopyWidget:
     """
     import vtkSlicerVMTKFunctionalitiesModuleLogic
 
-    if( points.GetNumberOfMarkups() > 10 ):
-      return False
+    #if( points.GetNumberOfMarkups() > 10 ):
+      #return False
                  
     inputPolyData = inputModel.GetPolyData()
 
@@ -693,7 +779,14 @@ class BronchoscopyWidget:
       self.CreateFiducialsPath(self.createdPath, self.pathFiducialsNode)
       model = BronchoscopyPathModel(self.pathFiducialsNode)
       
-      #slicer.mrmlScene.RemoveNode(self.pathFiducialsNode)
+      if self.points:
+        pos = [0,0,0]
+        for j in xrange(self.pathFiducialsNode.GetNumberOfFiducials()):
+          self.pathFiducialsNode.GetNthFiducialPosition(j,pos)
+          s = [pos[0],pos[1],pos[2]]
+          self.points.InsertNextPoint(s)  
+
+      slicer.mrmlScene.RemoveNode(self.pathFiducialsNode)
       markupLogic = slicer.modules.markups.logic()
       markupLogic.SetActiveListID(points)
       #self.pathFiducialsNode = None
@@ -710,7 +803,7 @@ class BronchoscopyWidget:
     startingPoint = [0,0,0]
     pathModel.GetPoint(position,startingPoint)
     #print "Starting point centerline: ",startingPoint
-    targetPosition=[0,0,0]
+    targetPosition = [0,0,0]
     pathModel.GetPoint(1,targetPosition)
            
     squaredDist = vtk.vtkMath.Distance2BetweenPoints(startingPoint,targetPosition)
@@ -755,9 +848,10 @@ class BronchoscopyWidget:
     qt.QTimer.singleShot(msec, self.info.close)
     self.info.exec_()
   
+###########################################################################################
+#################################### SENSOR TRACKING ######################################
+###########################################################################################
 
-
-############################# SENSOR TRACKING #################################
 
   def onProbeTrackButtonToggled(self, checked):     
     if checked:
@@ -773,6 +867,7 @@ class BronchoscopyWidget:
       self.fiducialListSelector.enabled = False
       self.PathCreationButton.enabled = False
       self.pointsListSelector.enabled = False
+      self.CreateFiducialListButton.enabled = False
 
       self.ProbeTrackButton.text = "Stop Tracking"
 
@@ -862,14 +957,14 @@ class BronchoscopyWidget:
           p = [point[0],point[1],point[2]]
           self.pointsList.append(p)
 
-      if self.pathCreated == 1:
+      '''if self.pathCreated == 1:
         pathFiducialsCollection = slicer.mrmlScene.GetNodesByName('pathFiducials')
         for j in xrange(pathFiducialsCollection.GetNumberOfItems()):
           fidNode = pathFiducialsCollection.GetItemAsObject(j)
           for n in xrange(fidNode.GetNumberOfFiducials()):
             fidNode.GetNthFiducialPosition(n,fiducialPos)
             s = [fiducialPos[0],fiducialPos[1],fiducialPos[2]]
-            self.pointsList.append(s)  
+            self.pointsList.append(s)''' 
 
       self.sensorTimer.start()
        
@@ -887,6 +982,9 @@ class BronchoscopyWidget:
       self.fiducialListSelector.enabled = True
       self.PathCreationButton.enabled = True
       self.pointsListSelector.enabled = True
+
+      if self.points.GetNumberOfPoints() > 0:
+        self.CreateFiducialListButton.enabled = True
 
       self.ProbeTrackButton.text = "Track Sensor"
 
@@ -945,7 +1043,7 @@ class BronchoscopyWidget:
     originalCoord = [0,0,0]
     originalCoord[0] = tMatrix.GetElement(0,3)
     originalCoord[1] = tMatrix.GetElement(1,3)
-    originalCoord[2] = tMatrix.GetElement(2,3)  
+    originalCoord[2] = tMatrix.GetElement(2,3)
 
     originalCoord = numpy.asarray(originalCoord)
 
@@ -958,7 +1056,7 @@ class BronchoscopyWidget:
     tMatrix.SetElement(2,3,closestPoint[2])
 
     ####################################################################################################################
-    # Continuosly Update ViewUp Of The Camera To Always Have It On The Direction Orthogonal To The Locator's Long Axis #
+    # Continuosly Update ViewUp Of The Camera To Always Have It On One Direction Orthogonal To The Locator's Long Axis #
     ####################################################################################################################
 
     x = closestPoint[0]
