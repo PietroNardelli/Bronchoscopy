@@ -48,9 +48,11 @@ class BronchoscopyWidget:
     self.points = vtk.vtkPoints()
     self.pointsList = []
     self.fiducialNode = None
-    self.path = None
 
     self.pathCreated = 0
+
+    self.pathModelNamesList = []
+    self.centerlinePoints = vtk.vtkPoints()
     
     self.probeCalibrationTransform = None
     self.centerlineCompensationTransform = None
@@ -494,6 +496,7 @@ class BronchoscopyWidget:
         self.fiducialNode.GetNthFiducialPosition(i,point)
         self.points.InsertNextPoint(point)
 
+    self.centerlinePoints.DeepCopy(self.points)
     return True
 
   def Smoothing(self, centModel, modelPoints, iterationsNumber):
@@ -718,19 +721,25 @@ class BronchoscopyWidget:
     # Update GUI
     self.updateGUI()
 
-  def pathComputation(self, inputModel, points):
+  def pathComputation(self, inputModel, STpoints):
     """
     Run the actual algorithm to create the path between the 2 fiducials
     """
     import vtkSlicerVMTKFunctionalitiesModuleLogic
 
-    #if( points.GetNumberOfMarkups() > 10 ):
-      #return False
-                 
+    if len(self.pathModelNamesList) > 0:
+      self.points = self.centerlinePoints
+      for n in xrange(len(self.pathModelNamesList)):
+        name = self.pathModelNamesList[n]
+        modelNode = slicer.mrmlScene.GetNodesByName(name)
+        model = modelNode.GetItemAsObject(0)
+        slicer.mrmlScene.RemoveNode(model)
+      self.pathModelNamesList = []
+        
     inputPolyData = inputModel.GetPolyData()
 
     sourcePosition = [0,0,0]
-    points.GetNthFiducialPosition(0,sourcePosition)
+    STpoints.GetNthFiducialPosition(0,sourcePosition)
 
     source = inputPolyData.FindPoint(sourcePosition)
 
@@ -740,10 +749,10 @@ class BronchoscopyWidget:
 
     targetPosition = [0,0,0]
     targetId = vtk.vtkIdList()
-    targetId.SetNumberOfIds(points.GetNumberOfFiducials()-1) 
+    targetId.SetNumberOfIds(STpoints.GetNumberOfFiducials()-1) 
       
-    for i in range(1, points.GetNumberOfFiducials()):
-      points.GetNthFiducialPosition(i,targetPosition)
+    for i in range(1, STpoints.GetNumberOfFiducials()):
+      STpoints.GetNthFiducialPosition(i,targetPosition)
  
       target = inputPolyData.FindPoint(targetPosition)
       targetId.InsertId(i-1,target)
@@ -772,24 +781,36 @@ class BronchoscopyWidget:
 
       self.pathSmoothing(self.createdPath)
 
-      self.pathFiducialsNode = slicer.vtkMRMLMarkupsFiducialNode()
-      self.pathFiducialsNode.SetName('pathFiducials')
-      slicer.mrmlScene.AddNode(self.pathFiducialsNode)
+      ############################ Create The 3D Model Of The Path And Add It To The Scene ############################################# 
 
-      self.CreateFiducialsPath(self.createdPath, self.pathFiducialsNode)
-      model = BronchoscopyPathModel(self.pathFiducialsNode)
-      
+      model = slicer.vtkMRMLModelNode()
+      model.SetScene(slicer.mrmlScene)
+      model.SetName(slicer.mrmlScene.GenerateUniqueName("PathModel"))
+      model.SetAndObservePolyData(self.createdPath)
+
+      # Create display node
+      modelDisplay = slicer.vtkMRMLModelDisplayNode()
+      modelDisplay.SetColor(1,1,0) # yellow
+      modelDisplay.SetScene(slicer.mrmlScene)
+      slicer.mrmlScene.AddNode(modelDisplay)
+      model.SetAndObserveDisplayNodeID(modelDisplay.GetID())
+
+      # Add to scene
+      if vtk.VTK_MAJOR_VERSION <= 5:
+        # shall not be needed.
+        modelDisplay.SetInputPolyData(model.GetPolyData())
+      slicer.mrmlScene.AddNode(model)
+
+      self.pathModelNamesList.append(model.GetName()) # Save names of the models to delete them before creating the new ones.
+
+      ########################################### Merge Centerline Points with Path Points ###############################################
       if self.points:
-        pos = [0,0,0]
-        for j in xrange(self.pathFiducialsNode.GetNumberOfFiducials()):
-          self.pathFiducialsNode.GetNthFiducialPosition(j,pos)
-          s = [pos[0],pos[1],pos[2]]
-          self.points.InsertNextPoint(s)  
+        pathPoints = self.createdPath.GetPoints()
+        for j in xrange(pathPoints.GetNumberOfPoints()):
+          self.points.InsertNextPoint(pathPoints.GetPoint(j))
 
-      slicer.mrmlScene.RemoveNode(self.pathFiducialsNode)
       markupLogic = slicer.modules.markups.logic()
-      markupLogic.SetActiveListID(points)
-      #self.pathFiducialsNode = None
+      markupLogic.SetActiveListID(STpoints)
       #self.createdPath = None
 
     return True
@@ -852,7 +873,6 @@ class BronchoscopyWidget:
 #################################### SENSOR TRACKING ######################################
 ###########################################################################################
 
-
   def onProbeTrackButtonToggled(self, checked):     
     if checked:
       self.ProbeTrackButton.setStyleSheet("background-color: rgb(255,95,70)")
@@ -887,6 +907,7 @@ class BronchoscopyWidget:
       self.resetCamera()
 
       ################## This turns the probe of 90 degrees when the tracking is started the first time #####################
+
       if self.probeCalibrationTransform == None:
         calibrationTransformNodes = slicer.mrmlScene.GetNodesByName('probeCalibrationTransform')
         if calibrationTransformNodes.GetNumberOfItems() == 0:
@@ -1071,64 +1092,3 @@ class BronchoscopyWidget:
     self.redLogic.SetSliceOffset(z)
 
     self.centerlineCompensationTransform.SetMatrixTransformToParent(tMatrix)
-
-class BronchoscopyPathModel:
-  """Create a vtkPolyData for a polyline:
-       - Add one point per path point.
-       - Add a single polyline
-  """
-  def __init__(self, fiducialListNode):
-  
-    fids = fiducialListNode
-    scene = slicer.mrmlScene
-    
-    points = vtk.vtkPoints()
-    self.polyData = vtk.vtkPolyData()
-    self.polyData.SetPoints(points)
-
-    lines = vtk.vtkCellArray()
-    self.polyData.SetLines(lines)
-    linesIDArray = lines.GetData()
-    linesIDArray.Reset()
-    linesIDArray.InsertNextTuple1(0)
-
-    polygons = vtk.vtkCellArray()
-    self.polyData.SetPolys( polygons )
-    idArray = polygons.GetData()
-    idArray.Reset()
-    idArray.InsertNextTuple1(0)
-
-    """for point in path:
-      pointIndex = points.InsertNextPoint(*point)
-      linesIDArray.InsertNextTuple1(pointIndex)
-      linesIDArray.SetTuple1( 0, linesIDArray.GetNumberOfTuples() - 1 )
-      lines.SetNumberOfCells(1)"""
-    index = [0,0,0]
- 
-    for n in xrange(0,fiducialListNode.GetNumberOfFiducials()):
-      fiducialListNode.GetNthFiducialPosition(n,index)
-      pointIndex = points.InsertNextPoint(index)
-      linesIDArray.InsertNextTuple1(pointIndex)
-      linesIDArray.SetTuple1( 0, linesIDArray.GetNumberOfTuples() - 1 )
-      lines.SetNumberOfCells(1)
-
-    #self.pathSmoothing(self.polyData)
-
-    # Create model node
-    model = slicer.vtkMRMLModelNode()
-    model.SetScene(scene)
-    model.SetName(scene.GenerateUniqueName("Path-%s" % fids.GetName()))
-    model.SetAndObservePolyData(self.polyData)
-
-    # Create display node
-    modelDisplay = slicer.vtkMRMLModelDisplayNode()
-    modelDisplay.SetColor(1,1,0) # yellow
-    modelDisplay.SetScene(scene)
-    scene.AddNode(modelDisplay)
-    model.SetAndObserveDisplayNodeID(modelDisplay.GetID())
-
-    # Add to scene
-    if vtk.VTK_MAJOR_VERSION <= 5:
-      # shall not be needed.
-      modelDisplay.SetInputPolyData(model.GetPolyData())
-    scene.AddNode(model)
