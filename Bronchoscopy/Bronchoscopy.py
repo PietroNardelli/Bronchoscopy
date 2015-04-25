@@ -88,6 +88,69 @@ class BronchoscopyWidget:
 
     # Instantiate and connect widgets ...
 
+    ###################################################################################
+    ##########################  Fiducial Registration Area ############################
+    ###################################################################################
+
+    registrationCollapsibleButton = ctk.ctkCollapsibleButton()
+    registrationCollapsibleButton.text = "Fiducial Registration Area"
+    self.layout.addWidget(registrationCollapsibleButton)
+    self.layout.setSpacing(20)
+    # Layout within the dummy collapsible button
+    registrationFormLayout = qt.QFormLayout(registrationCollapsibleButton)
+
+    regBox = qt.QHBoxLayout()
+    registrationFormLayout.addRow(regBox)
+    
+    self.registrationSelector = slicer.qMRMLNodeComboBox()
+    self.registrationSelector.nodeTypes = ( ("vtkMRMLMarkupsFiducialNode"), "" )
+    self.registrationSelector.selectNodeUponCreation = True
+    self.registrationSelector.addEnabled = False
+    self.registrationSelector.baseName = 'RegistrationPoints'
+    self.registrationSelector.removeEnabled = True
+    self.registrationSelector.noneEnabled = True
+    self.registrationSelector.showHidden = False
+    self.registrationSelector.showChildNodeTypes = False
+    self.registrationSelector.setMRMLScene( slicer.mrmlScene )
+    self.registrationSelector.setToolTip( "Select registration fiducial points" )
+    #registrationFormLayout.addRow("Registration Fiducials List: ", self.registrationSelector)
+
+    self.createRegistrationFiducialsButton = qt.QPushButton("Create Registration Points")
+    self.createRegistrationFiducialsButton.toolTip = "Create fiducial list for the registration."
+    self.createRegistrationFiducialsButton.setFixedSize(160,35)
+    self.createRegistrationFiducialsButton.setStyleSheet("background-color: rgb(255,246,142)")
+
+    regBox.addWidget(self.registrationSelector)
+    regBox.addWidget(self.createRegistrationFiducialsButton)
+
+    self.folderPathSelection = qt.QLineEdit()
+    self.folderPathSelection.setReadOnly(True)
+    #self.folderPathSelection.setFixedWidth(200)
+
+    selectionBox = qt.QHBoxLayout()
+    registrationFormLayout.addRow(selectionBox)
+
+    self.selectFolderButton = qt.QPushButton("Select Folder")
+    self.selectFolderButton.toolTip = "Select folder where to save the txt file containing the fiducial points."
+    self.selectFolderButton.setFixedSize(100,35)
+    self.selectFolderButton.setStyleSheet("background-color: rgb(255,246,142)")
+
+    selectionBox.addWidget(self.folderPathSelection)
+    selectionBox.addWidget(self.selectFolderButton)
+
+    self.RegFidListButton = qt.QPushButton("Save Registration Points")
+    self.RegFidListButton.toolTip = "Create a list of fiducial points starting from the extracted centerline of the 3D model."
+    self.RegFidListButton.setFixedSize(150,45)
+
+    if( self.registrationSelector.currentNode() and self.folderPathSelection.text):
+      self.RegFidListButton.enabled = True
+    else:
+      self.RegFidListButton.enabled = False
+
+    registrationBox = qt.QVBoxLayout()
+    registrationFormLayout.addRow(registrationBox)
+    registrationBox.addWidget(self.RegFidListButton,0,4)
+
     #
     # Parameters Area
     #
@@ -177,7 +240,6 @@ class BronchoscopyWidget:
       self.CreateFiducialListButton.enabled = False
     box = qt.QVBoxLayout()
     fiducialFormLayout.addRow(box)
-    box.addWidget(self.CreateFiducialListButton,0,4)
 
     ###################################################################################
     #########################  Extract Centerline Button  #############################
@@ -187,11 +249,14 @@ class BronchoscopyWidget:
     self.ExtractCenterlineButton.setFixedSize(200,50)
     if self.inputSelector.currentNode() and self.labelSelector.currentNode():
         self.ExtractCenterlineButton.enabled = True
+        self.ExtractCenterlineButton.setStyleSheet("background-color: rgb(175,255,253)")
     else:
         self.ExtractCenterlineButton.enabled = False
+        self.ExtractCenterlineButton.setStyleSheet("background-color: rgb(255,255,255)")
 
     IOFormLayout.addRow(boxLayout)
     boxLayout.addWidget(self.ExtractCenterlineButton,0,4)
+    boxLayout.addWidget(self.CreateFiducialListButton,0,4)
 
     ####################################################################################
     ######################  Create Path Towards An ROI Section  ########################
@@ -199,7 +264,6 @@ class BronchoscopyWidget:
     self.pathCreationCollapsibleButton = ctk.ctkCollapsibleButton()
     self.pathCreationCollapsibleButton.text = "Path Creation"
     self.pathCreationCollapsibleButton.setChecked(True)
-    #self.fiducialsCollapsibleButton.setFixedSize(400,40)
     self.pathCreationCollapsibleButton.enabled = True
     self.layout.addWidget(self.pathCreationCollapsibleButton)
     pathCreationFormLayout = qt.QFormLayout(self.pathCreationCollapsibleButton)
@@ -223,10 +287,13 @@ class BronchoscopyWidget:
     self.PathCreationButton = qt.QPushButton("Create Path(s)")
     self.PathCreationButton.toolTip = "Run the algorithm to create the path between the specified points."
     self.PathCreationButton.setFixedSize(300,50)
+
     if self.inputSelector.currentNode() and self.pointsListSelector.currentNode():
         self.PathCreationButton.enabled = True
+        self.PathCreationButton.setStyleSheet("background-color: rgb(158,255,116)")
     else:
         self.PathCreationButton.enabled = False
+        self.PathCreationButton.setStyleSheet("background-color: rgb(255,255,255)")
 
     bLayout = qt.QVBoxLayout()
 
@@ -262,7 +329,7 @@ class BronchoscopyWidget:
 
     self.ResetCameraButton.toolTip = "Reset camera if moved away."
     self.ResetCameraButton.setFixedSize(100,50)
-    self.ResetCameraButton.checkable = True
+    #self.ResetCameraButton.checkable = True
     
     trackerFormLayout.addWidget(self.ResetCameraButton, 0, 4)
 
@@ -273,18 +340,23 @@ class BronchoscopyWidget:
         self.ProbeTrackButton.enabled = False
         self.ResetCameraButton.enabled = False
 
-    #
-    # Create Connections
-    #
-    self.ExtractCenterlineButton.connect('clicked(bool)', self.onExtractCenterlineButton)
+    ########################################################################################
+    ################################ Create Connections ####################################
+    ########################################################################################
+
+    self.registrationSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
+    self.RegFidListButton.connect('clicked(bool)', self.onRegFidListButton)
     self.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.labelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
+    self.ExtractCenterlineButton.connect('clicked(bool)', self.onExtractCenterlineButton)
     self.fiducialListSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.pointsListSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.PathCreationButton.connect('clicked(bool)', self.onPathCreationButton)
     self.ProbeTrackButton.connect('toggled(bool)', self.onProbeTrackButtonToggled)
-    self.ResetCameraButton.connect('toggled(bool)',self.onResetCameraButtonToggled)
+    self.ResetCameraButton.connect('clicked(bool)',self.onResetCameraButtonPressed)
     self.CreateFiducialListButton.connect('toggled(bool)',self.onCreateFiducialListToggled)
+    self.selectFolderButton.connect('clicked(bool)', self.onSelectFolderButton)
+    self.createRegistrationFiducialsButton.connect('clicked(bool)', self.onCreateRegFidList)
     
     #
     # Add Vertical Spacer
@@ -310,6 +382,13 @@ class BronchoscopyWidget:
     secondThreeDView.lookFromViewAxis(ctk.ctkAxesWidget().Anterior)
 
   def onSelect(self):
+    self.updateGUI()
+
+    if self.registrationSelector.currentNode() and self.folderPathSelection.text:
+      self.RegFidListButton.enabled = True
+    else:
+      self.RegFidListButton.enabled = False
+
     if self.inputSelector.currentNode() and self.labelSelector.currentNode():
       inputVolume = self.inputSelector.currentNode()
       modelDisplayNode = inputVolume.GetDisplayNode()
@@ -317,8 +396,9 @@ class BronchoscopyWidget:
       modelDisplayNode.SetFrontfaceCulling(1)
       modelDisplayNode.SetBackfaceCulling(0)
 
-      self.updateGUI()
       self.ExtractCenterlineButton.enabled = True
+      self.ExtractCenterlineButton.setStyleSheet("background-color: rgb(175,255,253)")
+   
       if self.fiducialListSelector.currentNode():
         self.ProbeTrackButton.enabled = True
         self.ResetCameraButton.enabled = True
@@ -327,14 +407,53 @@ class BronchoscopyWidget:
         self.ResetCameraButton.enabled = False
     else:
       self.ExtractCenterlineButton.enabled = False
+      self.ExtractCenterlineButton.setStyleSheet("background-color: rgb(255,255,255)")
       self.PathCreationButton.enabled = False
+      self.PathCreationButton.setStyleSheet("background-color: rgb(255,255,255)")
       self.ProbeTrackButton.enabled = False
       self.ResetCameraButton.enabled = False
 
     if self.inputSelector.currentNode() and self.pointsListSelector.currentNode():
        self.PathCreationButton.enabled = True
+       self.PathCreationButton.setStyleSheet("background-color: rgb(158,255,116)")
     else:
        self.PathCreationButton.enabled = False
+       self.PathCreationButton.setStyleSheet("background-color: rgb(255,255,255)")
+
+  def disableButtonsAndSelectors(self):
+
+    self.selectFolderButton.enabled = False
+    self.selectFolderButton.setStyleSheet("background-color: rgb(255,255,255)")
+    self.createRegistrationFiducialsButton.enabled = False
+    self.RegFidListButton.enabled = False
+    self.ExtractCenterlineButton.enabled = False
+    self.ExtractCenterlineButton.setStyleSheet("background-color: rgb(255,255,255)")    
+    self.CreateFiducialListButton.enabled = False
+    self.PathCreationButton.enabled = False
+    self.PathCreationButton.setStyleSheet("background-color: rgb(255,255,255)")    
+    self.ProbeTrackButton.enabled = False
+    self.ResetCameraButton.enabled = False
+
+    self.inputSelector.enabled = False
+    self.labelSelector.enabled = False
+    self.fiducialListSelector.enabled = False
+    self.pointsListSelector.enabled = False
+    self.registrationSelector.enabled = False
+
+  def enableSelectors(self):
+
+    self.selectFolderButton.enabled = True
+    self.selectFolderButton.setStyleSheet("background-color: rgb(255,246,142)")
+
+    self.createRegistrationFiducialsButton.enabled = True
+    self.createRegistrationFiducialsButton.setStyleSheet("background-color: rgb(255,246,142)")
+
+    self.inputSelector.enabled = True
+    self.labelSelector.enabled = True
+    self.fiducialListSelector.enabled = True
+    self.pointsListSelector.enabled = True
+    self.registrationSelector.enabled = True
+
 
   def onReload(self,moduleName="Bronchoscopy"):
     """Generic reload method for any scripted module.
@@ -385,30 +504,75 @@ class BronchoscopyWidget:
     setattr(globals()['slicer'].modules, widgetName, globals()[widgetName.lower()])
 
 ##################################################################################################
+############################## REGISTRATION FIDUCIALS SAVING ##################################### 
+##################################################################################################
+# Copy fiducials used for the registration within a txt file to be saved in the Matlab folder
+
+  def onCreateRegFidList(self):
+
+    self.disableButtonsAndSelectors()
+    markupsList = slicer.vtkMRMLMarkupsFiducialNode()
+    markupsList.SetName('RegistrationPoints')
+    slicer.mrmlScene.AddNode(markupsList)
+    displayNode = markupsList.GetDisplayNode()
+    displayNode.SetSelectedColor((0,0,255))
+
+    self.registrationSelector.setCurrentNodeID(markupsList.GetID())
+
+    self.enableSelectors()
+    self.onSelect()
+
+  def onRegFidListButton(self):
+    
+    self.disableButtonsAndSelectors()
+   
+    regFidListNode = self.registrationSelector.currentNode()
+    point = [0,0,0]
+    pointsList = []
+    for i in xrange(regFidListNode.GetNumberOfFiducials()):
+      regFidListNode.GetNthFiducialPosition(i,point)
+      p = [point[0],point[1],point[2]]
+      pointsList.append(p)
+
+    wheretosave = self.folderPathSelection.text + "/RegistrationPoints.txt" 
+    numpy.savetxt(wheretosave,pointsList)
+
+    FList = slicer.mrmlScene.GetNodesByName('F')
+    AirwayFiducialList = slicer.mrmlScene.GetNodesByName('AirwayFiducial')
+
+    markupLogic = slicer.modules.markups.logic()
+    if FList.GetNumberOfItems() > 0:  
+      markupsList = FList.GetItemAsObject(0)
+      markupLogic.SetActiveListID(markupsList)       
+    elif AirwayFiducialList.GetNumberOfItems() > 0:
+      markupsList = AirwayFiducialList.GetItemAsObject(0)
+      markupLogic.SetActiveListID(markupsList) 
+
+    self.enableSelectors()
+    self.onSelect()
+
+    return True
+
+  def onSelectFolderButton(self):
+    self.disableButtonsAndSelectors()
+    self.folderPathSelection.setText(qt.QFileDialog.getExistingDirectory())
+    self.enableSelectors()
+    self.onSelect()
+
+
+##################################################################################################
 ################################### CENTERLINE EXTRACTION ######################################## 
 ##################################################################################################
 
   def onExtractCenterlineButton(self):
-    # Disable Buttons 
-    self.ExtractCenterlineButton.enabled = False
-    self.ProbeTrackButton.enabled = False
-    self.ResetCameraButton.enabled = False
-    self.inputSelector.enabled = False
-    self.labelSelector.enabled = False
-    self.fiducialListSelector.enabled = False
-    self.pointsListSelector.enabled = False
+ 
+    self.disableButtonsAndSelectors()
     
     # Extract Centerline 
     self.extractCenterline(self.labelSelector.currentNode()) 
     
-    # Enable Buttons Again
-    self.ExtractCenterlineButton.enabled = True
-    self.ProbeTrackButton.enabled = True
-    self.ResetCameraButton.enabled = True
-    self.inputSelector.enabled = True
-    self.labelSelector.enabled = True
-    self.fiducialListSelector.enabled = True
-    self.pointsListSelector.enabled = True
+    self.enableSelectors()
+    self.onSelect()
 
     if self.points.GetNumberOfPoints() > 0:
       self.CreateFiducialListButton.enabled = True
@@ -474,7 +638,8 @@ class BronchoscopyWidget:
       modelsCollection = slicer.mrmlScene.GetNodesByClass('vtkMRMLModelNode')
       numberOfItems = modelsCollection.GetNumberOfItems()
       self.centerlineModel = modelsCollection.GetItemAsObject(numberOfItems-1)
-      self.centerlineModel.SetDisplayVisibility(0)
+      displayNode = self.centerlineModel.GetDisplayNode()
+      displayNode.SetVisibility(0)
 
       # create fiducial list
       #self.fiducialNode = slicer.vtkMRMLMarkupsFiducialNode()
@@ -490,7 +655,8 @@ class BronchoscopyWidget:
     self.ResetCameraButton.enabled = True
 
     if self.fiducialNode:
-      self.fiducialNode.SetDisplayVisibility(0)
+      disNode = self.fiducialNode.GetDisplayNode()
+      disNode.SetVisibility(0)
       for i in xrange(self.fiducialNode.GetNumberOfFiducials()):
         point = [0,0,0]
         self.fiducialNode.GetNthFiducialPosition(i,point)
@@ -510,7 +676,7 @@ class BronchoscopyWidget:
     for iteration in range(0, iterationsNumber):
       if iteration == 0:
         centralPoint = [0,0,0]
-        for i in range(NumberOfCells-10,10,-10):
+        for i in range(NumberOfCells-10,10,-1):
           cell = centModel.GetCell(i)
           points = cell.GetPoints()
           if points.GetNumberOfPoints() % 2 == 0:
@@ -645,17 +811,8 @@ class BronchoscopyWidget:
 #######################################################################################################
 
   def onCreateFiducialListToggled(self, checked):
-    if checked:
-      self.CreateFiducialListButton.checked = False
-
-      # Disable Buttons Again
-      self.ExtractCenterlineButton.enabled = False
-      self.ProbeTrackButton.enabled = False
-      self.ResetCameraButton.enabled = False
-      self.inputSelector.enabled = False
-      self.labelSelector.enabled = False
-      self.fiducialListSelector.enabled = False
-      self.pointsListSelector.enabled = False
+    if checked:      
+      self.disableButtonsAndSelectors()
 
       fNode = slicer.vtkMRMLMarkupsFiducialNode()
       fNode.SetName('CenterlineFiducials')
@@ -665,16 +822,13 @@ class BronchoscopyWidget:
         self.points.GetPoint(i,point)
         fNode.AddFiducial(point[0],point[1],point[2])
 
-      fNode.SetDisplayVisibility(0)       
+      dNode = fNode.GetDisplayNode()
+      dNode.SetVisibility(0)       
    
-      # Enable Buttons Again
-      self.ExtractCenterlineButton.enabled = True
-      self.ProbeTrackButton.enabled = True
-      self.ResetCameraButton.enabled = True
-      self.inputSelector.enabled = True
-      self.labelSelector.enabled = True
-      self.fiducialListSelector.enabled = True
-      self.pointsListSelector.enabled = True
+      self.enableSelectors()
+
+      self.onSelect()
+      self.CreateFiducialListButton.checked = False
 
 
 #######################################################################################################
@@ -685,31 +839,15 @@ class BronchoscopyWidget:
     fiducials = self.pointsListSelector.currentNode()
 
     if fiducials.GetNumberOfFiducials() > 1 and fiducials.GetNumberOfFiducials() < 10:
-
-      # Disable Buttons
       self.pathCreated = 1
-      self.ExtractCenterlineButton.enabled = False
-      self.PathCreationButton.enabled = False
-      self.ProbeTrackButton.enabled = False
-      self.ResetCameraButton.enabled = False
-      self.inputSelector.enabled = False
-      self.labelSelector.enabled = False
-      self.fiducialListSelector.enabled = False
-      self.pointsListSelector.enabled = False
-      self.CreateFiducialListButton.enabled = False
+
+      self.disableButtonsAndSelectors()
 
       # Create Centerline Path 
       self.pathComputation(self.inputSelector.currentNode(), self.pointsListSelector.currentNode()) 
     
-      # Enable Buttons Again
-      self.ExtractCenterlineButton.enabled = True
-      self.PathCreationButton.enabled = True
-      self.ProbeTrackButton.enabled = True
-      self.ResetCameraButton.enabled = True
-      self.inputSelector.enabled = True
-      self.labelSelector.enabled = True
-      self.fiducialListSelector.enabled = True
-      self.pointsListSelector.enabled = True
+      self.enableSelectors()
+      self.onSelect()
 
       if self.points.GetNumberOfPoints() > 0:
         self.CreateFiducialListButton.enabled = True
@@ -875,19 +1013,14 @@ class BronchoscopyWidget:
 
   def onProbeTrackButtonToggled(self, checked):     
     if checked:
-      self.ProbeTrackButton.setStyleSheet("background-color: rgb(255,95,70)")
+      self.ProbeTrackButton.setStyleSheet("background-color: rgb(255,156,126)")
 
       if self.fiducialListSelector.currentNode():
         self.fiducialNode = self.fiducialListSelector.currentNode()
         self.fiducialNode.SetDisplayVisibility(0)
 
-      self.ExtractCenterlineButton.enabled = False
-      self.inputSelector.enabled = False
-      self.labelSelector.enabled = False
-      self.fiducialListSelector.enabled = False
-      self.PathCreationButton.enabled = False
-      self.pointsListSelector.enabled = False
-      self.CreateFiducialListButton.enabled = False
+      self.disableButtonsAndSelectors()
+      self.ProbeTrackButton.enabled = True
 
       self.ProbeTrackButton.text = "Stop Tracking"
 
@@ -904,7 +1037,7 @@ class BronchoscopyWidget:
       self.cNode.SetTypeServer(18944)
       self.cNode.Start()
 
-      self.resetCamera()
+      self.onResetCameraButtonPressed()
 
       ################## This turns the probe of 90 degrees when the tracking is started the first time #####################
 
@@ -975,6 +1108,7 @@ class BronchoscopyWidget:
       if self.points:
         for i in xrange(self.points.GetNumberOfPoints()):
           point = self.points.GetPoint(i)
+          #print point
           p = [point[0],point[1],point[2]]
           self.pointsList.append(p)
 
@@ -997,12 +1131,8 @@ class BronchoscopyWidget:
       #self.cameraForNavigation = None
       #self.probeCalibrationTransform = None
 
-      self.ExtractCenterlineButton.enabled = True
-      self.inputSelector.enabled = True
-      self.labelSelector.enabled = True
-      self.fiducialListSelector.enabled = True
-      self.PathCreationButton.enabled = True
-      self.pointsListSelector.enabled = True
+      self.enableSelectors()
+      self.onSelect()
 
       if self.points.GetNumberOfPoints() > 0:
         self.CreateFiducialListButton.enabled = True
@@ -1026,12 +1156,7 @@ class BronchoscopyWidget:
 
           self.CheckCurrentPosition(transformMatrix)
         
-  def onResetCameraButtonToggled(self, checked):
-    if checked:
-      self.ResetCameraButton.checked = False
-      self.resetCamera()
-
-  def resetCamera(self):
+  def onResetCameraButtonPressed(self):
     cameraNodes = slicer.mrmlScene.GetNodesByClass('vtkMRMLCameraNode')
     self.cameraForNavigation = cameraNodes.GetItemAsObject(0)
     if cameraNodes.GetNumberOfItems() > 0:
