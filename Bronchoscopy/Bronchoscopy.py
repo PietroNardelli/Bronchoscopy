@@ -290,7 +290,7 @@ class BronchoscopyWidget:
 
     if self.inputSelector.currentNode() and self.pointsListSelector.currentNode():
         self.PathCreationButton.enabled = True
-        self.PathCreationButton.setStyleSheet("background-color: rgb(158,255,116)")
+        self.PathCreationButton.setStyleSheet("background-color: rgb(255,246,142)")
     else:
         self.PathCreationButton.enabled = False
         self.PathCreationButton.setStyleSheet("background-color: rgb(255,255,255)")
@@ -329,16 +329,15 @@ class BronchoscopyWidget:
 
     self.ResetCameraButton.toolTip = "Reset camera if moved away."
     self.ResetCameraButton.setFixedSize(100,50)
-    #self.ResetCameraButton.checkable = True
+    self.ResetCameraButton.enabled = False
     
     trackerFormLayout.addWidget(self.ResetCameraButton, 0, 4)
 
     if self.fiducialListSelector.currentNode():
         self.ProbeTrackButton.enabled = True
-        self.ResetCameraButton.enabled = True
+        #self.ResetCameraButton.enabled = True
     else:
         self.ProbeTrackButton.enabled = False
-        self.ResetCameraButton.enabled = False
 
     ########################################################################################
     ################################ Create Connections ####################################
@@ -401,7 +400,7 @@ class BronchoscopyWidget:
    
       if self.fiducialListSelector.currentNode():
         self.ProbeTrackButton.enabled = True
-        self.ResetCameraButton.enabled = True
+        #self.ResetCameraButton.enabled = True
       else:
         self.ProbeTrackButton.enabled = False
         self.ResetCameraButton.enabled = False
@@ -415,7 +414,7 @@ class BronchoscopyWidget:
 
     if self.inputSelector.currentNode() and self.pointsListSelector.currentNode():
        self.PathCreationButton.enabled = True
-       self.PathCreationButton.setStyleSheet("background-color: rgb(158,255,116)")
+       self.PathCreationButton.setStyleSheet("background-color: rgb(255,246,142)")
     else:
        self.PathCreationButton.enabled = False
        self.PathCreationButton.setStyleSheet("background-color: rgb(255,255,255)")
@@ -992,7 +991,8 @@ class BronchoscopyWidget:
       fiducialList.AddFiducial(point[0],point[1],point[2])
       NthFiducial += 1
 
-    fiducialList.SetDisplayVisibility(0)
+    displayNode = fiducialList.GetDisplayNode()
+    displayNode.SetVisibility(0)
 
   def delayDisplay(self,message,msec=1000):
     #
@@ -1017,10 +1017,12 @@ class BronchoscopyWidget:
 
       if self.fiducialListSelector.currentNode():
         self.fiducialNode = self.fiducialListSelector.currentNode()
-        self.fiducialNode.SetDisplayVisibility(0)
+        displayNode = self.fiducialNode.GetDisplayNode()
+        displayNode.SetVisibility(0)
 
       self.disableButtonsAndSelectors()
       self.ProbeTrackButton.enabled = True
+      self.ResetCameraButton.enabled = True
 
       self.ProbeTrackButton.text = "Stop Tracking"
 
@@ -1125,6 +1127,8 @@ class BronchoscopyWidget:
        
     else:  # When button is released...
       self.ProbeTrackButton.setStyleSheet("background-color: rgb(255,255,255)")
+      self.ResetCameraButton.enabled = False
+
       self.sensorTimer.stop()
       self.cNode.Stop()
       #self.cNode = None
