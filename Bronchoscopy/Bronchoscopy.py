@@ -335,7 +335,6 @@ class BronchoscopyWidget:
 
     if self.fiducialListSelector.currentNode():
         self.ProbeTrackButton.enabled = True
-        #self.ResetCameraButton.enabled = True
     else:
         self.ProbeTrackButton.enabled = False
 
@@ -400,7 +399,6 @@ class BronchoscopyWidget:
    
       if self.fiducialListSelector.currentNode():
         self.ProbeTrackButton.enabled = True
-        #self.ResetCameraButton.enabled = True
       else:
         self.ProbeTrackButton.enabled = False
         self.ResetCameraButton.enabled = False
@@ -647,11 +645,10 @@ class BronchoscopyWidget:
 
       centerlinePolydata = self.centerlineModel.GetPolyData()
 
-      iterations = 5
+      iterations = 3
       self.Smoothing(centerlinePolydata, self.points, iterations)
 
     self.ProbeTrackButton.enabled = True
-    self.ResetCameraButton.enabled = True
 
     if self.fiducialNode:
       disNode = self.fiducialNode.GetDisplayNode()
@@ -675,7 +672,7 @@ class BronchoscopyWidget:
     for iteration in range(0, iterationsNumber):
       if iteration == 0:
         centralPoint = [0,0,0]
-        for i in range(NumberOfCells-10,10,-1):
+        for i in range(NumberOfCells-10,10,-4):
           cell = centModel.GetCell(i)
           points = cell.GetPoints()
           if points.GetNumberOfPoints() % 2 == 0:
@@ -812,6 +809,7 @@ class BronchoscopyWidget:
   def onCreateFiducialListToggled(self, checked):
     if checked:      
       self.disableButtonsAndSelectors()
+      self.CreateFiducialListButton.checked = False
 
       fNode = slicer.vtkMRMLMarkupsFiducialNode()
       fNode.SetName('CenterlineFiducials')
@@ -827,7 +825,6 @@ class BronchoscopyWidget:
       self.enableSelectors()
 
       self.onSelect()
-      self.CreateFiducialListButton.checked = False
 
 
 #######################################################################################################
@@ -1095,7 +1092,8 @@ class BronchoscopyWidget:
           probeNode.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
           #probePositionIndicator.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
 
-      ################## Camera is connected to the transform #####################
+      ################## Camera is connected to the transform if needed #####################
+
       self.cameraForNavigation.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
  
       lm = slicer.app.layoutManager()
@@ -1123,6 +1121,8 @@ class BronchoscopyWidget:
             s = [fiducialPos[0],fiducialPos[1],fiducialPos[2]]
             self.pointsList.append(s)''' 
 
+      camera = self.cameraForNavigation.GetCamera()
+      camera.SetClippingRange(0.7081381565016212, 708.1381565016211)
       self.sensorTimer.start()
        
     else:  # When button is released...
@@ -1135,8 +1135,19 @@ class BronchoscopyWidget:
       #self.cameraForNavigation = None
       #self.probeCalibrationTransform = None
 
+      lastFPBeforeStoppingTracking = [0,0,0]
+      lastPosBeforeStoppingTracking = [0,0,0]
+
+      self.cameraForNavigation.GetFocalPoint(lastFPBeforeStoppingTracking)
+      self.cameraForNavigation.GetPosition(lastPosBeforeStoppingTracking)
+
       self.enableSelectors()
       self.onSelect()
+
+      self.cameraForNavigation.SetFocalPoint(lastFPBeforeStoppingTracking[0],lastFPBeforeStoppingTracking[1],lastFPBeforeStoppingTracking[2])
+      self.cameraForNavigation.SetPosition(lastPosBeforeStoppingTracking[0],lastPosBeforeStoppingTracking[1],lastPosBeforeStoppingTracking[2])
+      camera = self.cameraForNavigation.GetCamera()
+      camera.SetClippingRange(0.7081381565016212, 708.1381565016211)
 
       if self.points.GetNumberOfPoints() > 0:
         self.CreateFiducialListButton.enabled = True
@@ -1181,7 +1192,7 @@ class BronchoscopyWidget:
           fp = [0,0,0]
           self.cameraForNavigation.GetFocalPoint(fp)
           self.cameraForNavigation.SetFocalPoint(fp[0],fp[1],fp[2])
-   
+      
   def CheckCurrentPosition(self, tMatrix):
 
     distance = []
