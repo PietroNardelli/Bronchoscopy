@@ -288,7 +288,7 @@ class BronchoscopyWidget:
     self.PathCreationButton.toolTip = "Run the algorithm to create the path between the specified points."
     self.PathCreationButton.setFixedSize(300,50)
 
-    if self.inputSelector.currentNode() and self.pointsListSelector.currentNode():
+    if self.inputSelector.currentNode() and self.pointsListSelector.currentNode() and self.points.GetNumberOfPoints()>0:
         self.PathCreationButton.enabled = True
         self.PathCreationButton.setStyleSheet("background-color: rgb(255,246,142)")
     else:
@@ -333,7 +333,7 @@ class BronchoscopyWidget:
     
     trackerFormLayout.addWidget(self.ResetCameraButton, 0, 4)
 
-    if self.fiducialListSelector.currentNode():
+    if self.fiducialListSelector.currentNode() or self.points.GetNumberOfPoints()>0:
         self.ProbeTrackButton.enabled = True
     else:
         self.ProbeTrackButton.enabled = False
@@ -397,7 +397,7 @@ class BronchoscopyWidget:
       self.ExtractCenterlineButton.enabled = True
       self.ExtractCenterlineButton.setStyleSheet("background-color: rgb(175,255,253)")
    
-      if self.fiducialListSelector.currentNode():
+      if self.fiducialListSelector.currentNode() or self.points.GetNumberOfPoints()>0:
         self.ProbeTrackButton.enabled = True
       else:
         self.ProbeTrackButton.enabled = False
@@ -410,7 +410,7 @@ class BronchoscopyWidget:
       self.ProbeTrackButton.enabled = False
       self.ResetCameraButton.enabled = False
 
-    if self.inputSelector.currentNode() and self.pointsListSelector.currentNode():
+    if self.inputSelector.currentNode() and self.pointsListSelector.currentNode() and self.points.GetNumberOfPoints()>0:
        self.PathCreationButton.enabled = True
        self.PathCreationButton.setStyleSheet("background-color: rgb(255,246,142)")
     else:
@@ -657,8 +657,10 @@ class BronchoscopyWidget:
         point = [0,0,0]
         self.fiducialNode.GetNthFiducialPosition(i,point)
         self.points.InsertNextPoint(point)
-
+   
     self.centerlinePoints.DeepCopy(self.points)
+    slicer.mrmlScene.RemoveNode(self.fiducialListSelector.currentNode())
+
     return True
 
   def Smoothing(self, centModel, modelPoints, iterationsNumber):
@@ -873,12 +875,14 @@ class BronchoscopyWidget:
     inputPolyData = inputModel.GetPolyData()
 
     sourcePosition = [0,0,0]
-    STpoints.GetNthFiducialPosition(0,sourcePosition)
+
+    sourceId = vtk.vtkIdList()
+    sourceId.SetNumberOfIds(1)
+
+    sourcePosition = self.points.GetPoint(0)
 
     source = inputPolyData.FindPoint(sourcePosition)
 
-    sourceId = vtk.vtkIdList()
-    sourceId.SetNumberOfIds(1) 
     sourceId.InsertId(0,source)
 
     targetPosition = [0,0,0]
@@ -938,7 +942,7 @@ class BronchoscopyWidget:
       self.pathModelNamesList.append(model.GetName()) # Save names of the models to delete them before creating the new ones.
 
       ########################################### Merge Centerline Points with Path Points ###############################################
-      if self.points:
+      if self.points.GetNumberOfPoints()>0:
         pathPoints = self.createdPath.GetPoints()
         for j in xrange(pathPoints.GetNumberOfPoints()):
           self.points.InsertNextPoint(pathPoints.GetPoint(j))
@@ -1105,7 +1109,7 @@ class BronchoscopyWidget:
       self.greenLogic = greenWidget.sliceLogic()
 
       fiducialPos = [0,0,0]
-      if self.points:
+      if self.points.GetNumberOfPoints()>0:
         for i in xrange(self.points.GetNumberOfPoints()):
           point = self.points.GetPoint(i)
           #print point
@@ -1122,7 +1126,7 @@ class BronchoscopyWidget:
             self.pointsList.append(s)''' 
 
       camera = self.cameraForNavigation.GetCamera()
-      camera.SetClippingRange(0.7081381565016212, 708.1381565016211)
+      camera.SetClippingRange(0.7081381565016212, 708.1381565016211) # to be checked
       self.sensorTimer.start()
        
     else:  # When button is released...
@@ -1147,7 +1151,7 @@ class BronchoscopyWidget:
       self.cameraForNavigation.SetFocalPoint(lastFPBeforeStoppingTracking[0],lastFPBeforeStoppingTracking[1],lastFPBeforeStoppingTracking[2])
       self.cameraForNavigation.SetPosition(lastPosBeforeStoppingTracking[0],lastPosBeforeStoppingTracking[1],lastPosBeforeStoppingTracking[2])
       camera = self.cameraForNavigation.GetCamera()
-      camera.SetClippingRange(0.7081381565016212, 708.1381565016211)
+      camera.SetClippingRange(0.7081381565016212, 708.1381565016211) # to be checked
 
       if self.points.GetNumberOfPoints() > 0:
         self.CreateFiducialListButton.enabled = True
@@ -1168,7 +1172,7 @@ class BronchoscopyWidget:
 
           if self.probeCalibrationTransform.GetTransformNodeID() == None:
             self.probeCalibrationTransform.SetAndObserveTransformNodeID(self.centerlineCompensationTransform.GetID())
-
+          
           self.CheckCurrentPosition(transformMatrix)
         
   def onResetCameraButtonPressed(self):
@@ -1177,7 +1181,7 @@ class BronchoscopyWidget:
     if cameraNodes.GetNumberOfItems() > 0:
       if self.cameraForNavigation.GetTransformNodeID() == None:
         self.cameraForNavigation.SetPosition(-1.0,0.0,0.0)
-        self.cameraForNavigation.SetFocalPoint(-10.0,0.0,0.0)
+        self.cameraForNavigation.SetFocalPoint(-5.0,0.0,0.0)
       else:
         tNodeCollections = slicer.mrmlScene.GetNodesByName('centerlineCompensationTransform')
         if tNodeCollections.GetNumberOfItems() > 0:
