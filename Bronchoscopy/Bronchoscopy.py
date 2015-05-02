@@ -2,6 +2,7 @@ import os
 import unittest
 from __main__ import vtk, qt, ctk, slicer
 import numpy
+import csv
 
 #
 # Bronchoscopy
@@ -232,7 +233,6 @@ class BronchoscopyWidget:
     self.CreateFiducialListButton = qt.QPushButton("Create Fiducial List From Centerline")
     self.CreateFiducialListButton.toolTip = "Create a list of fiducial points starting from the extracted cenetrline bof the 3D model."
     self.CreateFiducialListButton.setFixedSize(240,25)
-    self.CreateFiducialListButton.checkable = True
 
     if self.points.GetNumberOfPoints() > 0:
       self.CreateFiducialListButton.enabled = True
@@ -343,7 +343,7 @@ class BronchoscopyWidget:
     ########################################################################################
 
     self.registrationSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
-    self.RegFidListButton.connect('clicked(bool)', self.onRegFidListButton)
+    self.RegFidListButton.connect('clicked(bool)', self.onSaveRegistrationPoints)
     self.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.labelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.ExtractCenterlineButton.connect('clicked(bool)', self.onExtractCenterlineButton)
@@ -352,7 +352,7 @@ class BronchoscopyWidget:
     self.PathCreationButton.connect('clicked(bool)', self.onPathCreationButton)
     self.ProbeTrackButton.connect('toggled(bool)', self.onProbeTrackButtonToggled)
     self.ResetCameraButton.connect('clicked(bool)',self.onResetCameraButtonPressed)
-    self.CreateFiducialListButton.connect('toggled(bool)',self.onCreateFiducialListToggled)
+    self.CreateFiducialListButton.connect('clicked(bool)',self.onCreateAndSaveFiducialList)
     self.selectFolderButton.connect('clicked(bool)', self.onSelectFolderButton)
     self.createRegistrationFiducialsButton.connect('clicked(bool)', self.onCreateRegFidList)
     
@@ -417,6 +417,9 @@ class BronchoscopyWidget:
        self.PathCreationButton.enabled = False
        self.PathCreationButton.setStyleSheet("background-color: rgb(255,255,255)")
 
+    if self.points.GetNumberOfPoints() > 0:
+      self.CreateFiducialListButton.enabled = True
+
   def disableButtonsAndSelectors(self):
 
     self.selectFolderButton.enabled = False
@@ -450,7 +453,6 @@ class BronchoscopyWidget:
     self.fiducialListSelector.enabled = True
     self.pointsListSelector.enabled = True
     self.registrationSelector.enabled = True
-
 
   def onReload(self,moduleName="Bronchoscopy"):
     """Generic reload method for any scripted module.
@@ -519,7 +521,7 @@ class BronchoscopyWidget:
     self.enableSelectors()
     self.onSelect()
 
-  def onRegFidListButton(self):
+  def onSaveRegistrationPoints(self):
     
     self.disableButtonsAndSelectors()
    
@@ -804,29 +806,39 @@ class BronchoscopyWidget:
         else:
           modelPoints.InsertPoint(n, actualPoint)
 
-#######################################################################################################
-####################### Create A Fiducial List With A Fiducial On Each Point ##########################  
-#######################################################################################################
+########################################################################################################
+######################## Create A Fiducial List With A Fiducial On Each Point ##########################  
+########################################################################################################
 
-  def onCreateFiducialListToggled(self, checked):
-    if checked:      
-      self.disableButtonsAndSelectors()
-      self.CreateFiducialListButton.checked = False
+  def onCreateAndSaveFiducialList(self):
 
-      fNode = slicer.vtkMRMLMarkupsFiducialNode()
-      fNode.SetName('CenterlineFiducials')
-      slicer.mrmlScene.AddNode(fNode)
-      point = [0,0,0]
-      for i in xrange(self.points.GetNumberOfPoints()):
-        self.points.GetPoint(i,point)
-        fNode.AddFiducial(point[0],point[1],point[2])
+    self.disableButtonsAndSelectors()
 
-      dNode = fNode.GetDisplayNode()
-      dNode.SetVisibility(0)       
+    fiducialList = []
+    point = [0,0,0]
+
+    for n in xrange(self.points.GetNumberOfPoints()):
+      self.points.GetPoint(n,point)
+      ID =  'vtkMRMLMarkupsFiducialNode_' + str(n)
+      associatedNodeID = 'CenterlineFiducials-' + str(n+1)
+      line = [ID,point[0],point[1],point[2],0,0,0,1,1,1,0,associatedNodeID,'','']
+      fiducialList.append(line)
+
+    localDirectory = "/home/acorvo/Desktop/CenterlineFiducials.fcsv"
+    a =[]
+    with open(localDirectory, "wb") as f:
+      writer = csv.writer(f,)
+      version = slicer.app.applicationVersion
+      firstRow = '# Markups fiducial file version = ' + str(version[0:3])
+      a.append(firstRow)
+      writer.writerow(a)
+      writer.writerow(['# CoordinateSystem = 0'])
+      writer.writerow(['# columns = id']+['x']+['y']+['z']+['ow']+['ox']+['oy']+['oz']+['vis']+['sel']+['lock']+['label']+['desc']+['associatedNodeID'])
+      writer.writerows(fiducialList)  
    
-      self.enableSelectors()
+    self.enableSelectors()
 
-      self.onSelect()
+    self.onSelect()
 
 
 #######################################################################################################
@@ -837,18 +849,18 @@ class BronchoscopyWidget:
     fiducials = self.pointsListSelector.currentNode()
 
     if fiducials.GetNumberOfFiducials() > 1 and fiducials.GetNumberOfFiducials() < 10:
-      self.pathCreated = 1
-
       self.disableButtonsAndSelectors()
 
       # Create Centerline Path 
-      self.pathComputation(self.inputSelector.currentNode(), self.pointsListSelector.currentNode()) 
+      self.pathComputation(self.inputSelector.currentNode(), fiducials) 
     
       self.enableSelectors()
       self.onSelect()
 
       if self.points.GetNumberOfPoints() > 0:
         self.CreateFiducialListButton.enabled = True
+
+      self.pathCreated = 1
 
     else:
       string = 'The selected path fiducial list contains ' + str(fiducials.GetNumberOfFiducials()) + ' fiducials. Number of fiducials in the list must be between 2 and 10.'
