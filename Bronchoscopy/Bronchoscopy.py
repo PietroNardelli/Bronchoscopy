@@ -343,6 +343,8 @@ class BronchoscopyWidget:
     ########################################################################################
 
     self.registrationSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
+    self.selectFolderButton.connect('clicked(bool)', self.onSelectFolderButton)
+    self.createRegistrationFiducialsButton.connect('clicked(bool)', self.onCreateRegFidList)
     self.RegFidListButton.connect('clicked(bool)', self.onSaveRegistrationPoints)
     self.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.labelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
@@ -353,8 +355,6 @@ class BronchoscopyWidget:
     self.ProbeTrackButton.connect('toggled(bool)', self.onProbeTrackButtonToggled)
     self.ResetCameraButton.connect('clicked(bool)',self.onResetCameraButtonPressed)
     self.CreateFiducialListButton.connect('clicked(bool)',self.onCreateAndSaveFiducialList)
-    self.selectFolderButton.connect('clicked(bool)', self.onSelectFolderButton)
-    self.createRegistrationFiducialsButton.connect('clicked(bool)', self.onCreateRegFidList)
     
     #
     # Add Vertical Spacer
@@ -533,8 +533,11 @@ class BronchoscopyWidget:
       p = [point[0],point[1],point[2]]
       pointsList.append(p)
 
-    wheretosave = self.folderPathSelection.text + "/RegistrationPoints.txt" 
-    numpy.savetxt(wheretosave,pointsList)
+    localDirectory = self.folderPathSelection.text + "/RegistrationPoints.csv"
+
+    with open(localDirectory, "wb") as f:
+      writer = csv.writer(f, delimiter=' ')
+      writer.writerows(pointsList) 
 
     FList = slicer.mrmlScene.GetNodesByName('F')
     AirwayFiducialList = slicer.mrmlScene.GetNodesByName('AirwayFiducial')
