@@ -1111,9 +1111,16 @@ class BronchoscopyWidget:
           probeNode.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
           #probePositionIndicator.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
 
-      ################## Camera is connected to the transform if needed #####################
+      ################## Camera 1 is connected to the transform #####################
 
       self.cameraForNavigation.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
+
+      ########## Camera 2 is will automatically follow the probe ##########
+      cameraNodes = slicer.mrmlScene.GetNodesByClass('vtkMRMLCameraNode')
+      self.secondCamera = cameraNodes.GetItemAsObject(1)
+      self.secondCamera.SetFocalPoint(-1.0,0.0,0.0)
+
+      ####### red, yellow, and green positions are modified to follow the probe on the CT ###### 
  
       lm = slicer.app.layoutManager()
       yellowWidget = lm.sliceWidget('Yellow')
@@ -1243,7 +1250,7 @@ class BronchoscopyWidget:
     y = closestPoint[1]
     z = closestPoint[2]          
     c = (x+y)/z
-    viewUp = [-1,-1,c]
+    viewUp = [1,1,c]
     self.cameraForNavigation.SetViewUp(viewUp)
 
     self.yellowLogic.SetSliceOffset(x)
@@ -1251,3 +1258,8 @@ class BronchoscopyWidget:
     self.redLogic.SetSliceOffset(z)
 
     self.centerlineCompensationTransform.SetMatrixTransformToParent(tMatrix)
+
+    pos = [0,0,0]
+    self.secondCamera.SetFocalPoint(x,y,z)
+    self.secondCamera.SetPosition(x,y+250,z)
+    
