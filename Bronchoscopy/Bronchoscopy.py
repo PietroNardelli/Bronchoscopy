@@ -3,6 +3,7 @@ import unittest
 from __main__ import vtk, qt, ctk, slicer
 import numpy
 import csv
+import math
 
 #
 # Bronchoscopy
@@ -53,6 +54,7 @@ class BronchoscopyWidget:
     self.pathCreated = 0
 
     self.pathModelNamesList = []
+
     self.centerlinePoints = vtk.vtkPoints()
     
     self.probeCalibrationTransform = None
@@ -60,6 +62,10 @@ class BronchoscopyWidget:
     self.cameraForNavigation = None
     self.cNode = None
     self.probeToTrackerTransformNode = None
+
+    self.layoutManager = slicer.app.layoutManager()
+    self.firstThreeDView = self.layoutManager.threeDWidget( 0 ).threeDView()
+    self.secondThreeDView = self.layoutManager.threeDWidget( 1 ).threeDView()
 
     self.updateGUI()
 
@@ -272,14 +278,14 @@ class BronchoscopyWidget:
     self.pointsListSelector.nodeTypes = ( ("vtkMRMLMarkupsFiducialNode"), "" )
     self.pointsListSelector.selectNodeUponCreation = True
     self.pointsListSelector.addEnabled = True
-    self.pointsListSelector.baseName = 'PathFiducial'
+    self.pointsListSelector.baseName = 'PathFiducials'
     self.pointsListSelector.removeEnabled = True
     self.pointsListSelector.noneEnabled = True
     self.pointsListSelector.showHidden = False
     self.pointsListSelector.showChildNodeTypes = False
     self.pointsListSelector.setMRMLScene( slicer.mrmlScene )
     self.pointsListSelector.setToolTip( "Select points for path creation." )
-    pathCreationFormLayout.addRow("Points List: ", self.pointsListSelector)
+    pathCreationFormLayout.addRow("Path(s) Points List: ", self.pointsListSelector)
     
     ###################################################################################
     #############################  Path Creation Button  ############################## 
@@ -299,6 +305,38 @@ class BronchoscopyWidget:
 
     pathCreationFormLayout.addRow(bLayout)
     bLayout.addWidget(self.PathCreationButton,0,4)
+
+    #################################################################################
+    ################ Path Visualization And Distance To Target Info #################
+    #################################################################################
+
+    self.pathInfoCollapsibleButton = ctk.ctkCollapsibleButton()
+    self.pathInfoCollapsibleButton.text = "Path Visualization and Distance To Target Information"
+    self.pathInfoCollapsibleButton.setChecked(True)
+    self.pathInfoCollapsibleButton.enabled = True
+    self.layout.addWidget(self.pathInfoCollapsibleButton)
+    pathInfoFormLayout = qt.QFormLayout(self.pathInfoCollapsibleButton)
+
+    self.pathModelSelector = slicer.qMRMLNodeComboBox()
+    self.pathModelSelector.nodeTypes = ( ("vtkMRMLModelNode"), "" )
+    self.pathModelSelector.selectNodeUponCreation = True
+    self.pathModelSelector.addEnabled = False
+    self.pathModelSelector.removeEnabled = True
+    self.pathModelSelector.noneEnabled = True
+    self.pathModelSelector.showHidden = False
+    self.pathModelSelector.showChildNodeTypes = False
+    self.pathModelSelector.setMRMLScene( slicer.mrmlScene )
+    self.pathModelSelector.setToolTip( "Pick the 3D path model to visualize." )
+    pathInfoFormLayout.addRow("Path Model: ", self.pathModelSelector)
+
+    self.pathLength = qt.QLineEdit()
+    self.pathLength.setReadOnly(True)
+
+    self.distanceToTarget = qt.QLineEdit()
+    self.distanceToTarget.setReadOnly(True)
+
+    pathInfoFormLayout.addRow("Path Length:", self.pathLength)
+    pathInfoFormLayout.addRow("Distance To Target: ", self.distanceToTarget)
 
     #############################################################################################
     ###########################  Sensor Tracker Collapsible Button  #############################
@@ -346,15 +384,19 @@ class BronchoscopyWidget:
     self.selectFolderButton.connect('clicked(bool)', self.onSelectFolderButton)
     self.createRegistrationFiducialsButton.connect('clicked(bool)', self.onCreateRegFidList)
     self.RegFidListButton.connect('clicked(bool)', self.onSaveRegistrationPoints)
+
     self.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.labelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.ExtractCenterlineButton.connect('clicked(bool)', self.onExtractCenterlineButton)
     self.fiducialListSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
+    self.CreateFiducialListButton.connect('clicked(bool)',self.onCreateAndSaveFiducialList)
+
     self.pointsListSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.PathCreationButton.connect('clicked(bool)', self.onPathCreationButton)
+    self.pathModelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onPathSelect)
+
     self.ProbeTrackButton.connect('toggled(bool)', self.onProbeTrackButtonToggled)
     self.ResetCameraButton.connect('clicked(bool)',self.onResetCameraButtonPressed)
-    self.CreateFiducialListButton.connect('clicked(bool)',self.onCreateAndSaveFiducialList)
     
     #
     # Add Vertical Spacer
@@ -370,14 +412,16 @@ class BronchoscopyWidget:
     pass
 
   def updateGUI(self):
-    lm=slicer.app.layoutManager()
-    lm.setLayout(15)
-    firstThreeDView = lm.threeDWidget( 0 ).threeDView()
-    firstThreeDView.resetFocalPoint()
-    firstThreeDView.lookFromViewAxis(ctk.ctkAxesWidget().Anterior)
-    secondThreeDView = lm.threeDWidget( 1 ).threeDView()
-    secondThreeDView.resetFocalPoint()
-    secondThreeDView.lookFromViewAxis(ctk.ctkAxesWidget().Anterior)
+    #lm=slicer.app.layoutManager()
+    #lm.setLayout(15)
+    self.layoutManager.setLayout(15)
+    #firstThreeDView = lm.threeDWidget( 0 ).threeDView()
+    self.firstThreeDView.resetFocalPoint()
+    self.firstThreeDView.lookFromViewAxis(ctk.ctkAxesWidget().Anterior)
+
+    #secondThreeDView = lm.threeDWidget( 1 ).threeDView()
+    self.secondThreeDView.resetFocalPoint()
+    self.secondThreeDView.lookFromViewAxis(ctk.ctkAxesWidget().Anterior)
 
   def onSelect(self):
     self.updateGUI()
@@ -419,6 +463,49 @@ class BronchoscopyWidget:
 
     if self.points.GetNumberOfPoints() > 0:
       self.CreateFiducialListButton.enabled = True
+
+  def onPathSelect(self):
+    # Hide all paths and fiducials...
+    if len(self.pathModelNamesList) > 0:
+      for n in xrange(len(self.pathModelNamesList)):
+        pathName = self.pathModelNamesList[n]
+        pathNode = slicer.mrmlScene.GetNodesByName(pathName)
+        pathModel = pathNode.GetItemAsObject(0)
+        displayNode = pathModel.GetDisplayNode()
+        displayNode.SetVisibility(0)
+
+    fidNode =  self.pointsListSelector.currentNode()
+    for i in xrange(fidNode.GetNumberOfFiducials()):        
+      fidNode.SetNthFiducialVisibility(i,0)
+     
+    # ...and show only the selected one
+    pathModel = self.pathModelSelector.currentNode()
+    displayNode = pathModel.GetDisplayNode()
+    displayNode.SetVisibility(1)
+
+    # Display fiducial corresponding to the selected path
+    name = pathModel.GetName()
+    idx = self.pathModelNamesList.index(name)
+    fidNode =  self.pointsListSelector.currentNode()
+    fidNode.SetNthFiducialVisibility(idx+1,1)
+
+    self.pathInfo(pathModel)
+
+  def pathInfo(self, model):
+    polyData = model.GetPolyData()
+    numberOfPoints = polyData.GetNumberOfPoints()
+    
+    firstPoint = [0,0,0]
+    polyData.GetPoint(numberOfPoints-1, firstPoint)
+    lastPoint = [0,0,0]
+    polyData.GetPoint(1, lastPoint)
+
+    squaredLength = vtk.vtkMath.Distance2BetweenPoints(firstPoint, lastPoint)
+    length = math.sqrt(squaredLength)
+    length = int(length)
+    length = str(length) + ' mm'        
+       
+    self.pathLength.setText(length)
 
   def disableButtonsAndSelectors(self):
 
@@ -561,7 +648,6 @@ class BronchoscopyWidget:
     self.enableSelectors()
     self.onSelect()
 
-
 ##################################################################################################
 ################################### CENTERLINE EXTRACTION ######################################## 
 ##################################################################################################
@@ -662,7 +748,7 @@ class BronchoscopyWidget:
         point = [0,0,0]
         self.fiducialNode.GetNthFiducialPosition(i,point)
         self.points.InsertNextPoint(point)
-   
+
     self.centerlinePoints.DeepCopy(self.points)
     slicer.mrmlScene.RemoveNode(self.fiducialListSelector.currentNode())
 
@@ -851,10 +937,10 @@ class BronchoscopyWidget:
   def onPathCreationButton(self):
     fiducials = self.pointsListSelector.currentNode()
 
-    if fiducials.GetNumberOfFiducials() > 1 and fiducials.GetNumberOfFiducials() < 10:
+    if fiducials.GetNumberOfFiducials() > 1 and fiducials.GetNumberOfFiducials() < 20:
       self.disableButtonsAndSelectors()
 
-      # Create Centerline Path 
+      # Create Centerline Path
       self.pathComputation(self.inputSelector.currentNode(), fiducials) 
     
       self.enableSelectors()
@@ -866,13 +952,13 @@ class BronchoscopyWidget:
       self.pathCreated = 1
 
     else:
-      string = 'The selected path fiducial list contains ' + str(fiducials.GetNumberOfFiducials()) + ' fiducials. Number of fiducials in the list must be between 2 and 10.'
+      string = 'The selected path fiducial list contains ' + str(fiducials.GetNumberOfFiducials()) + ' fiducials. Number of fiducials in the list must be between 2 and 20.'
       raise Exception(string)
    
     # Update GUI
     self.updateGUI()
 
-  def pathComputation(self, inputModel, STpoints):
+  def pathComputation(self, inputModel, targetPoints):
     """
     Run the actual algorithm to create the path between the 2 fiducials
     """
@@ -902,11 +988,11 @@ class BronchoscopyWidget:
 
     targetPosition = [0,0,0]
     targetId = vtk.vtkIdList()
-    targetId.SetNumberOfIds(STpoints.GetNumberOfFiducials()-1) 
+    targetId.SetNumberOfIds(targetPoints.GetNumberOfFiducials()-1) 
       
-    for i in range(1, STpoints.GetNumberOfFiducials()):
-      STpoints.GetNthFiducialPosition(i,targetPosition)
- 
+    for i in range(1, targetPoints.GetNumberOfFiducials()):
+      targetPoints.SetNthFiducialLabel(i,str(i))
+      targetPoints.GetNthFiducialPosition(i,targetPosition)
       target = inputPolyData.FindPoint(targetPosition)
       targetId.InsertId(i-1,target)
 
@@ -943,8 +1029,10 @@ class BronchoscopyWidget:
 
       # Create display node
       modelDisplay = slicer.vtkMRMLModelDisplayNode()
-      modelDisplay.SetColor(1,1,0) # yellow
+      modelDisplay.SetColor(0,1,0) # green
       modelDisplay.SetScene(slicer.mrmlScene)
+      modelDisplay.SetSliceIntersectionVisibility(1)
+      modelDisplay.SetSliceIntersectionThickness(10)
       slicer.mrmlScene.AddNode(modelDisplay)
       model.SetAndObserveDisplayNodeID(modelDisplay.GetID())
 
@@ -954,17 +1042,16 @@ class BronchoscopyWidget:
         modelDisplay.SetInputPolyData(model.GetPolyData())
       slicer.mrmlScene.AddNode(model)
 
-      self.pathModelNamesList.append(model.GetName()) # Save names of the models to delete them before creating the new ones.
+      self.pathModelNamesList.append(model.GetName()) # Save names to delete models before creating the new ones.
 
       ########################################### Merge Centerline Points with Path Points ###############################################
-      if self.points.GetNumberOfPoints()>0:
+      if self.points.GetNumberOfPoints() > 0:
         pathPoints = self.createdPath.GetPoints()
         for j in xrange(pathPoints.GetNumberOfPoints()):
           self.points.InsertNextPoint(pathPoints.GetPoint(j))
 
       markupLogic = slicer.modules.markups.logic()
-      markupLogic.SetActiveListID(STpoints)
-      #self.createdPath = None
+      markupLogic.SetActiveListID(targetPoints)
 
     return True
      
@@ -998,17 +1085,17 @@ class BronchoscopyWidget:
     
     self.createdPath = centerlineSmoothing.GetOutput()
 
-  def CreateFiducialsPath(self, pathPolyData, fiducialList):
-    NoP = pathPolyData.GetNumberOfPoints()    
-    NthFiducial = 0
-    point = [0,0,0]
-    for i in xrange(NoP):
-      pathPolyData.GetPoint(i,point)
-      fiducialList.AddFiducial(point[0],point[1],point[2])
-      NthFiducial += 1
+  #def CreateFiducialsPath(self, pathPolyData, fiducialList):
+    #NoP = pathPolyData.GetNumberOfPoints()    
+    #NthFiducial = 0
+    #point = [0,0,0]
+    #for i in xrange(NoP):
+      #pathPolyData.GetPoint(i,point)
+      #fiducialList.AddFiducial(point[0],point[1],point[2])
+      #NthFiducial += 1
 
-    displayNode = fiducialList.GetDisplayNode()
-    displayNode.SetVisibility(0)
+    #displayNode = fiducialList.GetDisplayNode()
+    #displayNode.SetVisibility(0)
 
   def delayDisplay(self,message,msec=1000):
     #
@@ -1031,10 +1118,10 @@ class BronchoscopyWidget:
     if checked:
       self.ProbeTrackButton.setStyleSheet("background-color: rgb(255,156,126)")
 
-      if self.fiducialListSelector.currentNode():
-        self.fiducialNode = self.fiducialListSelector.currentNode()
-        displayNode = self.fiducialNode.GetDisplayNode()
-        displayNode.SetVisibility(0)
+      #if self.fiducialListSelector.currentNode():
+        #self.fiducialNode = self.fiducialListSelector.currentNode()
+        #displayNode = self.fiducialNode.GetDisplayNode()
+        #displayNode.SetVisibility(0)
 
       self.disableButtonsAndSelectors()
       self.ProbeTrackButton.enabled = True
@@ -1089,7 +1176,7 @@ class BronchoscopyWidget:
       if needleModelNodes.GetNumberOfItems() > 0:
         probeNode = needleModelNodes.GetItemAsObject(0)
         probeDisplayNode = probeNode.GetDisplayNode()
-        probeDisplayNode.SetColor(0.4, 1.0, 0.0)
+        probeDisplayNode.SetColor(0, 1, 0)
         probeDisplayNode.SetSliceIntersectionVisibility(1)
         probeDisplayNode.SetSliceIntersectionThickness(4)
 
@@ -1120,7 +1207,7 @@ class BronchoscopyWidget:
       self.secondCamera = cameraNodes.GetItemAsObject(1)
       self.secondCamera.SetFocalPoint(-1.0,0.0,0.0)
 
-      ####### red, yellow, and green positions are modified to follow the probe on the CT ###### 
+      ####### Red, yellow, and green positions are modified to follow the probe on the CT ###### 
  
       lm = slicer.app.layoutManager()
       yellowWidget = lm.sliceWidget('Yellow')
@@ -1130,6 +1217,7 @@ class BronchoscopyWidget:
       greenWidget = lm.sliceWidget('Green')
       self.greenLogic = greenWidget.sliceLogic()
 
+      ###### Create a list of points from the vtkPoints object ############
       fiducialPos = [0,0,0]
       if self.points.GetNumberOfPoints()>0:
         for i in xrange(self.points.GetNumberOfPoints()):
@@ -1138,20 +1226,20 @@ class BronchoscopyWidget:
           p = [point[0],point[1],point[2]]
           self.pointsList.append(p)
 
-      '''if self.pathCreated == 1:
-        pathFiducialsCollection = slicer.mrmlScene.GetNodesByName('pathFiducials')
-        for j in xrange(pathFiducialsCollection.GetNumberOfItems()):
-          fidNode = pathFiducialsCollection.GetItemAsObject(j)
-          for n in xrange(fidNode.GetNumberOfFiducials()):
-            fidNode.GetNthFiducialPosition(n,fiducialPos)
-            s = [fiducialPos[0],fiducialPos[1],fiducialPos[2]]
-            self.pointsList.append(s)''' 
-
+        # Avoid repetition of the same point twice
+        self.pointsList = numpy.array([list(x) for x in set(tuple(x) for x in self.pointsList)])
+        self.pointsList.tolist()
+ 
+      ####################### Set clipping range for the first camera ####################
       camera = self.cameraForNavigation.GetCamera()
       camera.SetClippingRange(0.7081381565016212, 708.1381565016211) # to be checked
+
       self.sensorTimer.start()
+ 
+      self.firstViewCornerAnnotation = self.firstThreeDView.cornerAnnotation()
        
     else:  # When button is released...
+
       self.ProbeTrackButton.setStyleSheet("background-color: rgb(255,255,255)")
       self.ResetCameraButton.enabled = False
 
@@ -1262,4 +1350,29 @@ class BronchoscopyWidget:
     pos = [0,0,0]
     self.secondCamera.SetFocalPoint(x,y,z)
     self.secondCamera.SetPosition(x,y+250,z)
+  
+    pathModel = self.pathModelSelector.currentNode()
+    pathPolyData = pathModel.GetPolyData()
+    self.distanceToTargetComputation(pathPolyData, closestPoint)
+
+  def distanceToTargetComputation(self, polyData, secondPoint):
+
+    numberOfPoints = polyData.GetNumberOfPoints()
     
+    firstPoint = [0,0,0]
+    polyData.GetPoint(1, firstPoint)
+
+    squaredDistance = vtk.vtkMath.Distance2BetweenPoints(firstPoint, secondPoint)
+    length = math.sqrt(squaredDistance)
+    length = int(length)
+    length = str(length) + ' mm'        
+       
+    self.distanceToTarget.setText(length)
+    
+    distToTarget = 'Distance To Target: ' + length
+
+    self.firstViewCornerAnnotation.SetText(3,distToTarget) 
+    color = qt.QColor('yellow')
+    txtProperty = self.firstViewCornerAnnotation.GetTextProperty()
+    txtProperty.SetColor(color.redF(), color.greenF(), color.blueF())
+    self.firstThreeDView.forceRender() 
