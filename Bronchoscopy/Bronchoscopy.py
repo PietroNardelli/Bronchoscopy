@@ -1431,6 +1431,8 @@ class BronchoscopyWidget:
     color = qt.QColor('yellow')
     txtProperty = self.firstViewCornerAnnotation.GetTextProperty()
     txtProperty.SetColor(color.redF(), color.greenF(), color.blueF())
+    txtProperty.SetBold(1)
+    txtProperty.SetFontFamilyAsString(Courier)
     self.firstThreeDView.forceRender()
 
   ###########################################################################################
