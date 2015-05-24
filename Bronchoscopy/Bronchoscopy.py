@@ -1003,7 +1003,7 @@ class BronchoscopyWidget:
     """
     Run the actual algorithm to create the path between the 2 fiducials
     """
-    import vtkSlicerVMTKFunctionalitiesModuleLogic
+    import vtkSlicerPathExtractionClassesModuleLogic as vmtkLogic
 
     if len(self.pathModelNamesList) > 0:
       self.points = self.centerlinePoints
@@ -1037,7 +1037,7 @@ class BronchoscopyWidget:
       target = inputPolyData.FindPoint(targetPosition)
       targetId.InsertId(i-1,target)
 
-    pathCreation = vtkSlicerVMTKFunctionalitiesModuleLogic.vtkvmtkPolyDataCenterlines()
+    pathCreation = vmtkLogic.vtkSlicerPathExtractionClassesPolyDataCenterlinesLogic()
 
     # Multiple paths for different ROIs are created!
 
@@ -1098,7 +1098,7 @@ class BronchoscopyWidget:
      
   def pathSmoothing(self, pathModel):
       
-    import vtkSlicerVMTKFunctionalitiesModuleLogic
+    import vtkSlicerPathExtractionClassesModuleLogic as vmtkLogic
     
     NumberOfPoints = pathModel.GetNumberOfPoints()
     position = NumberOfPoints-1
@@ -1118,7 +1118,7 @@ class BronchoscopyWidget:
       smoothfactor = 1
       iterations = 100
       
-    centerlineSmoothing = vtkSlicerVMTKFunctionalitiesModuleLogic.vtkvmtkCenterlineSmoothing()
+    centerlineSmoothing = vmtkLogic.vtkSlicerPathExtractionClassesCenterlineSmoothingLogic()
     centerlineSmoothing.SetInputData(pathModel)
     centerlineSmoothing.SetNumberOfSmoothingIterations(iterations)
     centerlineSmoothing.SetSmoothingFactor(smoothfactor)
@@ -1432,7 +1432,7 @@ class BronchoscopyWidget:
     txtProperty = self.firstViewCornerAnnotation.GetTextProperty()
     txtProperty.SetColor(color.redF(), color.greenF(), color.blueF())
     txtProperty.SetBold(1)
-    txtProperty.SetFontFamilyAsString(Courier)
+    txtProperty.SetFontFamilyAsString('Courier')
     self.firstThreeDView.forceRender()
 
   ###########################################################################################
