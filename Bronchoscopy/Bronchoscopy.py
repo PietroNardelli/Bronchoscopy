@@ -48,6 +48,14 @@ class BronchoscopyWidget:
     self.sensorTimer.setInterval(1)
     self.sensorTimer.connect('timeout()', self.ReadPosition)
 
+    self.registrationTimer = qt.QTimer()
+    self.registrationTimer.setInterval(5000)
+    self.registrationTimer.connect('timeout()', self.registerImage)
+
+    self.checkStreamingTimer = qt.QTimer()
+    self.checkStreamingTimer.setInterval(5)
+    self.checkStreamingTimer.connect('timeout()', self.showVideoStreaming)
+
     self.points = vtk.vtkPoints()
     self.pointsList = []
     self.fiducialNode = None
@@ -63,8 +71,14 @@ class BronchoscopyWidget:
     self.cameraForNavigation = None
     self.cNode = None
     self.probeToTrackerTransformNode = None
+    self.videoStreamingNode = None
+
+    self.customLayoutId = 501
 
     self.layoutManager = slicer.app.layoutManager()
+    
+    self.setLayout()
+
     self.firstThreeDView = self.layoutManager.threeDWidget( 0 ).threeDView()
     self.secondThreeDView = self.layoutManager.threeDWidget( 1 ).threeDView()
 
@@ -74,6 +88,100 @@ class BronchoscopyWidget:
       self.setup()
       self.parent.show()
       self.updateGUI()
+
+  def setLayout(self):
+    customLayout = ("<layout type=\"vertical\" split=\"true\" >"
+                    " <item>"
+                    "  <layout type=\"horizontal\">"
+                    "   <item>"
+                    "    <view class=\"vtkMRMLSliceNode\" singletontag=\"RealView\">"
+                    "     <property name=\"orientation\" action=\"default\">Axial</property>"
+                    "     <property name=\"viewlabel\" action=\"default\">RV</property>"
+                    "     <property name=\"viewcolor\" action=\"default\">#8C8C8C</property>"
+                    "    </view>"
+                    "   </item>"
+                    "   <item>"
+                    "    <view class=\"vtkMRMLViewNode\" singletontag=\"1\">"
+                    "     <property name=\"viewlabel\" action=\"default\">1</property>"
+                    "    </view>"
+                    "   </item>"
+                    "   <item>"
+                    "    <view class=\"vtkMRMLViewNode\" singletontag=\"2\" type=\"secondary\">"
+                    "     <property name=\"viewlabel\" action=\"default\">2</property>"
+                    "    </view>"
+                    "   </item>"
+                    "  </layout>"
+                    " </item>"
+                    " <item>"
+                    "  <layout type=\"horizontal\">"
+                    "   <item>"
+                    "    <view class=\"vtkMRMLSliceNode\" singletontag=\"Red\">"
+                    "     <property name=\"orientation\" action=\"default\">Axial</property>"
+                    "     <property name=\"viewlabel\" action=\"default\">R</property>"
+                    "     <property name=\"viewcolor\" action=\"default\">#F34A33</property>"
+                    "    </view>"
+                    "   </item>"
+                    "   <item>"
+                    "    <view class=\"vtkMRMLSliceNode\" singletontag=\"Yellow\">"
+                    "     <property name=\"orientation\" action=\"default\">Sagittal</property>"
+                    "     <property name=\"viewlabel\" action=\"default\">Y</property>"
+                    "     <property name=\"viewcolor\" action=\"default\">#EDD54C</property>"
+                    "    </view>"
+                    "   </item>"
+                    "   <item>"
+                    "    <view class=\"vtkMRMLSliceNode\" singletontag=\"Green\">"
+                    "     <property name=\"orientation\" action=\"default\">Coronal</property>"
+                    "     <property name=\"viewlabel\" action=\"default\">G</property>"
+                    "     <property name=\"viewcolor\" action=\"default\">#6EB04B</property>"
+                    "    </view>"
+                    "   </item>"
+                    "  </layout>"
+                    " </item>"
+                    "</layout>")
+    self.layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(self.customLayoutId, customLayout)
+    self.layoutManager.setLayout(self.customLayoutId)
+
+  def cleanup(self):
+    pass
+
+  def updateGUI(self):
+    self.layoutManager.setLayout(self.customLayoutId)
+
+    self.firstThreeDView.resetFocalPoint()
+    self.firstThreeDView.lookFromViewAxis(ctk.ctkAxesWidget().Anterior)
+
+    self.secondThreeDView.resetFocalPoint()
+    self.secondThreeDView.lookFromViewAxis(ctk.ctkAxesWidget().Anterior)
+
+    self.startVideoStreaming()
+
+  def startVideoStreaming(self):
+    if self.videoStreamingNode == None:
+      streamingNodes = slicer.mrmlScene.GetNodesByName('streamingConnector')
+      if streamingNodes.GetNumberOfItems() == 0:
+        self.videoStreamingNode = slicer.vtkMRMLIGTLConnectorNode()
+        slicer.mrmlScene.AddNode(self.videoStreamingNode)
+        self.videoStreamingNode.SetName('streamingConnector')
+      else:
+        self.videoStreamingNode = streamingNodes.GetItemAsObject(0)
+
+      #self.videoStreamingNode.SetType(2)
+      self.videoStreamingNode.SetTypeClient('localhost',18945)
+      self.videoStreamingNode.Start()
+
+      self.checkStreamingTimer.start()
+
+  def showVideoStreaming(self):
+    if self.videoStreamingNode.GetState() == 2:
+      videoNodesCollection = slicer.mrmlScene.GetNodesByName('Image_Reference')
+      videoNode = videoNodesCollection.GetItemAsObject(0)
+      if videoNode:
+        realViewWidget = self.layoutManager.sliceWidget('RealView')
+        RVLogic = realViewWidget.sliceLogic()
+        RV_cn = RVLogic.GetSliceCompositeNode()
+        RV_cn.SetBackgroundVolumeID(videoNode.GetID())
+        RVLogic.FitSliceToVolume(videoNode,1,1)
+        self.checkStreamingTimer.stop()
 
   def setup(self):
     #
@@ -383,7 +491,7 @@ class BronchoscopyWidget:
     ################################ Image Registration ####################################
     ########################################################################################
     imgRegCollapsibleButton = ctk.ctkCollapsibleButton()
-    imgRegCollapsibleButton.text = "Image Registration"
+    imgRegCollapsibleButton.text = "Image Registration Section"
     self.layout.addWidget(imgRegCollapsibleButton)
     self.layout.setSpacing(20)
     imgRegFormLayout = qt.QFormLayout(imgRegCollapsibleButton)
@@ -391,24 +499,15 @@ class BronchoscopyWidget:
     realImgSelectionBox = qt.QHBoxLayout()
     imgRegFormLayout.addRow(realImgSelectionBox)
 
-    self.realImageSelection = qt.QLineEdit()
-    self.realImageSelection.setReadOnly(True)
-
-    self.selectImageButton = qt.QPushButton("Select Image For Registration")
-    self.selectImageButton.toolTip = "Select Image for registration."
-    self.selectImageButton.setFixedSize(200,35)
-
-    realImgSelectionBox.addWidget(self.realImageSelection)
-    realImgSelectionBox.addWidget(self.selectImageButton)
-
     registrationBox = qt.QVBoxLayout()
     registrationFormLayout.addRow(registrationBox)
     registrationBox.addWidget(self.RegFidListButton,0,4)
 
-    self.ImageRegistrationButton = qt.QPushButton("Register Image")
-    self.ImageRegistrationButton.toolTip = "Register image if needed."
+    self.ImageRegistrationButton = qt.QPushButton("Start Image Registration")
+    self.ImageRegistrationButton.toolTip = "Start registration between real and virtual images."
     self.ImageRegistrationButton.setFixedSize(250,50)
-    self.ImageRegistrationButton.enabled = False
+    self.ImageRegistrationButton.enabled = True
+    self.ImageRegistrationButton.checkable = True
     
     imgRegButtonBox = qt.QVBoxLayout()
     imgRegFormLayout.addRow(imgRegButtonBox)
@@ -436,8 +535,8 @@ class BronchoscopyWidget:
 
     self.ProbeTrackButton.connect('toggled(bool)', self.onProbeTrackButtonToggled)
     self.ResetCameraButton.connect('clicked(bool)',self.onResetCameraButtonPressed)
-    self.selectImageButton.connect('clicked(bool)',self.onSelectImageButtonPressed)
-    self.ImageRegistrationButton.connect('clicked(bool)',self.onImageRegistrationButtonPressed)
+
+    self.ImageRegistrationButton.connect('toggled(bool)',self.onStartImageRegistrationButtonPressed)
     
     #
     # Add Vertical Spacer
@@ -448,18 +547,6 @@ class BronchoscopyWidget:
     # Update the 3D Views
     #
     self.updateGUI()
-
-  def cleanup(self):
-    pass
-
-  def updateGUI(self):
-    self.layoutManager.setLayout(15)
-
-    self.firstThreeDView.resetFocalPoint()
-    self.firstThreeDView.lookFromViewAxis(ctk.ctkAxesWidget().Anterior)
-
-    self.secondThreeDView.resetFocalPoint()
-    self.secondThreeDView.lookFromViewAxis(ctk.ctkAxesWidget().Anterior)
 
   def onSelect(self):
     self.updateGUI()
@@ -484,7 +571,7 @@ class BronchoscopyWidget:
       else:
         self.ProbeTrackButton.enabled = False
         self.ResetCameraButton.enabled = False
-        self.ImageRegistrationButton.enabled = False
+        #self.ImageRegistrationButton.enabled = False
     else:
       self.ExtractCenterlineButton.enabled = False
       self.ExtractCenterlineButton.setStyleSheet("background-color: rgb(255,255,255)")
@@ -492,7 +579,7 @@ class BronchoscopyWidget:
       self.PathCreationButton.setStyleSheet("background-color: rgb(255,255,255)")
       self.ProbeTrackButton.enabled = False
       self.ResetCameraButton.enabled = False
-      self.ImageRegistrationButton.enabled = False
+      #self.ImageRegistrationButton.enabled = False
 
     if self.inputSelector.currentNode() and self.pointsListSelector.currentNode() and self.points.GetNumberOfPoints()>0:
        self.PathCreationButton.enabled = True
@@ -560,7 +647,7 @@ class BronchoscopyWidget:
     self.PathCreationButton.setStyleSheet("background-color: rgb(255,255,255)")    
     self.ProbeTrackButton.enabled = False
     self.ResetCameraButton.enabled = False
-    self.ImageRegistrationButton.enabled = False
+    #self.ImageRegistrationButton.enabled = False
 
     self.inputSelector.enabled = False
     self.labelSelector.enabled = False
@@ -1061,12 +1148,20 @@ class BronchoscopyWidget:
 
       self.pathSmoothing(self.createdPath)
 
+      ############################ Make the path thicker #######################
+
+      tubeFilter = vtk.vtkTubeFilter()
+      tubeFilter.SetInputData(self.createdPath)
+      tubeFilter.SetRadius(0.2)
+      tubeFilter.SetNumberOfSides(100)
+      tubeFilter.Update()
+
       ############################ Create The 3D Model Of The Path And Add It To The Scene ############################################# 
 
       model = slicer.vtkMRMLModelNode()
       model.SetScene(slicer.mrmlScene)
       model.SetName(slicer.mrmlScene.GenerateUniqueName("PathModel"))
-      model.SetAndObservePolyData(self.createdPath)
+      model.SetAndObservePolyData(tubeFilter.GetOutput())
 
       # Create display node
       modelDisplay = slicer.vtkMRMLModelDisplayNode()
@@ -1168,9 +1263,6 @@ class BronchoscopyWidget:
       self.ProbeTrackButton.enabled = True
       self.ResetCameraButton.enabled = True
 
-      if self.realImageSelection.text:
-        self.ImageRegistrationButton.enabled = True
-
       self.ProbeTrackButton.text = "Stop Tracking"
 
       if self.cNode == None:
@@ -1220,7 +1312,7 @@ class BronchoscopyWidget:
       if needleModelNodes.GetNumberOfItems() > 0:
         probeNode = needleModelNodes.GetItemAsObject(0)
         probeDisplayNode = probeNode.GetDisplayNode()
-        probeDisplayNode.SetColor(0, 1, 0)
+        probeDisplayNode.SetColor(0, 0, 1)
         probeDisplayNode.SetSliceIntersectionVisibility(1)
         probeDisplayNode.SetSliceIntersectionThickness(4)
 
@@ -1281,18 +1373,18 @@ class BronchoscopyWidget:
       camera.SetClippingRange(0.7081381565016212, 708.1381565016211) # to be checked
 
       self.sensorTimer.start()
- 
+       
       self.layoutManager = slicer.app.layoutManager()
       self.firstThreeDView = self.layoutManager.threeDWidget( 0 ).threeDView()
       self.firstViewCornerAnnotation = self.firstThreeDView.cornerAnnotation()
        
-    else:  # When button is released...
-
+    else:  # When button is released...      
       self.ProbeTrackButton.setStyleSheet("background-color: rgb(255,255,255)")
       self.ResetCameraButton.enabled = False
-      self.ImageRegistrationButton.enabled = False
+      #self.ImageRegistrationButton.enabled = False
 
       self.sensorTimer.stop()
+      self.registrationTimer.stop()
       self.cNode.Stop()
       #self.cNode = None
       #self.cameraForNavigation = None
@@ -1319,6 +1411,7 @@ class BronchoscopyWidget:
         self.CreateFiducialListButton.enabled = True
 
       self.ProbeTrackButton.text = "Track Sensor"
+      
 
   def ReadPosition(self):
       if self.cNode.GetState() == 2:
@@ -1432,51 +1525,58 @@ class BronchoscopyWidget:
     txtProperty = self.firstViewCornerAnnotation.GetTextProperty()
     txtProperty.SetColor(color.redF(), color.greenF(), color.blueF())
     txtProperty.SetBold(1)
-    txtProperty.SetFontFamilyAsString('Courier')
+    #txtProperty.SetFontFamilyAsString('Courier')
     self.firstThreeDView.forceRender()
 
   ###########################################################################################
   ################################## Image Registration #####################################
   ###########################################################################################
+  def onStartImageRegistrationButtonPressed(self, checked):
+    if checked:
+      self.registrationTimer.start()
+      self.ImageRegistrationButton.text = "Stop Image Registration"
+    else:
+      self.registrationTimer.stop()
+      self.ImageRegistrationButton.text = "Start Image Registration"
 
-  def onSelectImageButtonPressed(self):
-    self.realImageSelection.setText(qt.QFileDialog.getOpenFileName())
-    if self.realImageSelection.text:
-      self.ImageRegistrationButton.enabled = True
 
-  def onImageRegistrationButtonPressed(self):
-    #PitchRollYawIncrement = 1
-    #RollAmount = 5
-
-    #self.firstThreeDView.setPitchRollYawIncrement(PitchRollYawIncrement)
-    #self.firstThreeDView.rollDirection = self.firstThreeDView.RollLeft
- 
+  def registerImage(self):
     # Read the real image
-    realImageReader = vtk.vtkPNGReader()
-    realImageReader.SetFileName(self.realImageSelection.text)
-    realImageReader.Update()
+    videoNodesCollcetion = slicer.mrmlScene.GetNodesByName('Image_Reference')
+    videoNode = videoNodesCollcetion.GetItemAsObject(0)
 
-    realImage = realImageReader.GetOutput()  
-
+    # Crop image to remove the info part on the left side
+    VOIExtract = vtk.vtkExtractVOI()
+    VOIExtract.SetInputConnection(videoNode.GetImageDataConnection())
+    VOIExtract.SetVOI(180,571,58,430,0,0)
+    VOIExtract.Update()
+    w = vtk.vtkPNGWriter()
+    w.SetInputConnection(VOIExtract.GetOutputPort())
+    w.SetFileName('C:/Users/Lab/Desktop/text.png')
+    w.Write()
+    
+    # Flip image about x
+    realImageFlip = vtk.vtk.vtkImageFlip()
+    realImageFlip.SetFilteredAxis(0)
+    realImageFlip.SetInputConnection(VOIExtract.GetOutputPort())
+    realImageFlip.Update()
+    
     # Convert image to gray-scale 
     realExtract = vtk.vtkImageExtractComponents()
     realExtract.SetComponents(0,1,2)
     realLuminance = vtk.vtkImageLuminance()
-    IJKToRAS = vtk.vtkMatrix4x4()
+    
     if vtk.VTK_MAJOR_VERSION <= 5:
-      realExtract.SetInput(realImage)
+      realExtract.SetInput(realImageFlip.GetOutput())
       realLuminance.SetInput(realExtract.GetOutput())
       realLuminance.GetOutput().Update() 
     else:
-      realExtract.SetInputConnection( realImageReader.GetOutputPort() )
+      realExtract.SetInputConnection(realImageFlip.GetOutputPort())
       realLuminance.SetInputConnection(realExtract.GetOutputPort())
       realLuminance.Update()
 
-    label = self.labelSelector.currentNode()
-    label.GetIJKToRASMatrix(IJKToRAS)
     realScalarVolume = slicer.vtkMRMLScalarVolumeNode()
     realScalarVolume.SetName('fixedScalarImage')
-    realScalarVolume.SetIJKToRASMatrix(IJKToRAS)
 
     if vtk.VTK_MAJOR_VERSION <= 5:
       realScalarVolume.SetImageData(realLuminance.GetOutput())
@@ -1493,8 +1593,6 @@ class BronchoscopyWidget:
     wti.Update()
   
     # Convert image to gray-scale
-    movingImage = wti.GetOutput();
-
     movingExtract = vtk.vtkImageExtractComponents()
     movingExtract.SetComponents(0,1,2)
     movingLuminance = vtk.vtkImageLuminance()
@@ -1507,24 +1605,21 @@ class BronchoscopyWidget:
       movingLuminance.SetInputConnection(movingExtract.GetOutputPort())
       movingLuminance.Update()
 
-    #movingImage.GetIJKToRASMatrix(IJKToRAS)
+    # Flip image about x
+    movingImageFlip = vtk.vtk.vtkImageFlip()
+    movingImageFlip.SetFilteredAxis(0)
+    movingImageFlip.SetInputData(movingLuminance.GetOutput())
+    movingImageFlip.Update()
+
     movingScalarVolume = slicer.vtkMRMLScalarVolumeNode()
     movingScalarVolume.SetName('movingScalarImage')
-    movingScalarVolume.SetIJKToRASMatrix(IJKToRAS)
    
     if vtk.VTK_MAJOR_VERSION <= 5:
-      movingScalarVolume.SetImageData(movingLuminance.GetOutput())
+      movingScalarVolume.SetImageData(movingImageFlip.GetOutput())
     else:
-      movingScalarVolume.SetImageDataConnection(movingLuminance.GetOutputPort())
+      movingScalarVolume.SetAndObserveImageData(movingImageFlip.GetOutput())
 
     slicer.mrmlScene.AddNode(movingScalarVolume)
-
-    ###########################################
-    ############ to be removed ################
-    outputImage = slicer.vtkMRMLScalarVolumeNode()
-    outputImage.SetName('outputVolume')
-    slicer.mrmlScene.AddNode(outputImage)
-    ###########################################
 
     anglesNumber = 36
     print anglesNumber
@@ -1539,7 +1634,9 @@ class BronchoscopyWidget:
     angle = cliRegistrationNode.GetParameterDefault(0,2)
     angle = int(angle)
 
-    self.firstThreeDView.rollDirection = self.firstThreeDView.rollRight
+    self.firstThreeDView.rollDirection = self.firstThreeDView.RollRight
     self.firstThreeDView.pitchRollYawIncrement = abs(angle)
     self.firstThreeDView.roll()
 
+    slicer.mrmlScene.RemoveNode(movingScalarVolume)
+    slicer.mrmlScene.RemoveNode(realScalarVolume)
