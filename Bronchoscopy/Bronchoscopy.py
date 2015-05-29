@@ -153,36 +153,6 @@ class BronchoscopyWidget:
     self.secondThreeDView.resetFocalPoint()
     self.secondThreeDView.lookFromViewAxis(ctk.ctkAxesWidget().Anterior)
 
-    self.startVideoStreaming()
-
-  def startVideoStreaming(self):
-    if self.videoStreamingNode == None:
-      streamingNodes = slicer.mrmlScene.GetNodesByName('streamingConnector')
-      if streamingNodes.GetNumberOfItems() == 0:
-        self.videoStreamingNode = slicer.vtkMRMLIGTLConnectorNode()
-        slicer.mrmlScene.AddNode(self.videoStreamingNode)
-        self.videoStreamingNode.SetName('streamingConnector')
-      else:
-        self.videoStreamingNode = streamingNodes.GetItemAsObject(0)
-
-      #self.videoStreamingNode.SetType(2)
-      self.videoStreamingNode.SetTypeClient('localhost',18945)
-      self.videoStreamingNode.Start()
-
-      self.checkStreamingTimer.start()
-
-  def showVideoStreaming(self):
-    if self.videoStreamingNode.GetState() == 2:
-      videoNodesCollection = slicer.mrmlScene.GetNodesByName('Image_Reference')
-      videoNode = videoNodesCollection.GetItemAsObject(0)
-      if videoNode:
-        realViewWidget = self.layoutManager.sliceWidget('RealView')
-        RVLogic = realViewWidget.sliceLogic()
-        RV_cn = RVLogic.GetSliceCompositeNode()
-        RV_cn.SetBackgroundVolumeID(videoNode.GetID())
-        RVLogic.FitSliceToVolume(videoNode,1,1)
-        self.checkStreamingTimer.stop()
-
   def setup(self):
     #
     # Reload and Test area
@@ -499,9 +469,9 @@ class BronchoscopyWidget:
     realImgSelectionBox = qt.QHBoxLayout()
     imgRegFormLayout.addRow(realImgSelectionBox)
 
-    registrationBox = qt.QVBoxLayout()
-    registrationFormLayout.addRow(registrationBox)
-    registrationBox.addWidget(self.RegFidListButton,0,4)
+    #registrationBox = qt.QVBoxLayout()
+    #registrationFormLayout.addRow(registrationBox)
+    #registrationBox.addWidget(self.RegFidListButton,0,4)
 
     self.ImageRegistrationButton = qt.QPushButton("Start Image Registration")
     self.ImageRegistrationButton.toolTip = "Start registration between real and virtual images."
@@ -513,6 +483,34 @@ class BronchoscopyWidget:
     imgRegFormLayout.addRow(imgRegButtonBox)
 
     imgRegButtonBox.addWidget(self.ImageRegistrationButton, 0, 4)
+
+
+    #####################################################################################
+    ################################ Video Streaming ####################################
+    #####################################################################################
+    videoStreamCollapsibleButton = ctk.ctkCollapsibleButton()
+    videoStreamCollapsibleButton.text = "Video Streaming Section"
+    self.layout.addWidget(videoStreamCollapsibleButton)
+    self.layout.setSpacing(20)
+    videoStreamingFormLayout = qt.QFormLayout(videoStreamCollapsibleButton)
+
+    videoStreamingSelectionBox = qt.QHBoxLayout()
+    videoStreamingFormLayout.addRow(videoStreamingSelectionBox)
+
+    #VSBox = qt.QVBoxLayout()
+    #videoStreamingFormLayout.addRow(VSBox)
+    #VSBox.addWidget(self.RegFidListButton,0,4)
+
+    self.VideoRegistrationButton = qt.QPushButton("Start Video Streaming")
+    self.VideoRegistrationButton.toolTip = "Stream the real video within the lung"
+    self.VideoRegistrationButton.setFixedSize(250,50)
+    self.VideoRegistrationButton.enabled = True
+    self.VideoRegistrationButton.checkable = True
+    
+    VSButtonBox = qt.QVBoxLayout()
+    videoStreamingFormLayout.addRow(VSButtonBox)
+
+    VSButtonBox.addWidget(self.VideoRegistrationButton, 0, 4)
 
     ########################################################################################
     ################################ Create Connections ####################################
@@ -537,6 +535,8 @@ class BronchoscopyWidget:
     self.ResetCameraButton.connect('clicked(bool)',self.onResetCameraButtonPressed)
 
     self.ImageRegistrationButton.connect('toggled(bool)',self.onStartImageRegistrationButtonPressed)
+
+    self.VideoRegistrationButton.connect('toggled(bool)',self.startVideoStreaming)
     
     #
     # Add Vertical Spacer
@@ -602,6 +602,10 @@ class BronchoscopyWidget:
         displayNode.SetVisibility(0)
 
     fidNode =  self.pointsListSelector.currentNode()
+    fidDisplayNode = fidNode.GetDisplayNode()
+    fidDisplayNode.SetGlyphScale(8)
+    fidDisplayNode.SetTextScale(8)
+    
     for i in xrange(fidNode.GetNumberOfFiducials()):        
       fidNode.SetNthFiducialVisibility(i,0)
      
@@ -1041,7 +1045,7 @@ class BronchoscopyWidget:
       line = [ID,point[0],point[1],point[2],0,0,0,1,1,1,0,associatedNodeID,'','']
       fiducialList.append(line)
 
-    localDirectory = "/home/acorvo/Desktop/CenterlineFiducials.fcsv"
+    localDirectory = "C:/Users/Lab/Desktop/CenterlineFiducials.fcsv"
     a =[]
     with open(localDirectory, "wb") as f:
       writer = csv.writer(f,)
@@ -1152,8 +1156,8 @@ class BronchoscopyWidget:
 
       tubeFilter = vtk.vtkTubeFilter()
       tubeFilter.SetInputData(self.createdPath)
-      tubeFilter.SetRadius(0.2)
-      tubeFilter.SetNumberOfSides(100)
+      tubeFilter.SetRadius(0.25)
+      tubeFilter.SetNumberOfSides(50)
       tubeFilter.Update()
 
       ############################ Create The 3D Model Of The Path And Add It To The Scene ############################################# 
@@ -1622,7 +1626,7 @@ class BronchoscopyWidget:
     slicer.mrmlScene.AddNode(movingScalarVolume)
 
     anglesNumber = 36
-    print anglesNumber
+    #print anglesNumber
     imageRegistration = slicer.modules.imageregistrationcli
     parameters = {
           "fixedImage": realScalarVolume,
@@ -1640,3 +1644,36 @@ class BronchoscopyWidget:
 
     slicer.mrmlScene.RemoveNode(movingScalarVolume)
     slicer.mrmlScene.RemoveNode(realScalarVolume)
+
+  def startVideoStreaming(self, checked):
+    if checked:
+      if self.videoStreamingNode == None:
+        streamingNodes = slicer.mrmlScene.GetNodesByName('streamingConnector')
+        if streamingNodes.GetNumberOfItems() == 0:
+          self.videoStreamingNode = slicer.vtkMRMLIGTLConnectorNode()
+          slicer.mrmlScene.AddNode(self.videoStreamingNode)
+          self.videoStreamingNode.SetName('streamingConnector')
+        else:
+          self.videoStreamingNode = streamingNodes.GetItemAsObject(0)
+
+        #self.videoStreamingNode.SetType(2)
+        self.videoStreamingNode.SetTypeClient('localhost',18945)
+        self.videoStreamingNode.Start()
+
+        self.checkStreamingTimer.start()
+    else:
+      if self.videoStreamingNode != None:
+        self.videoStreamingNode.Stop()      
+
+  def showVideoStreaming(self):
+    if self.videoStreamingNode != None: 
+      if self.videoStreamingNode.GetState() == 2:
+        videoNodesCollection = slicer.mrmlScene.GetNodesByName('Image_Reference')
+        videoNode = videoNodesCollection.GetItemAsObject(0)
+        if videoNode:
+          realViewWidget = self.layoutManager.sliceWidget('RealView')
+          RVLogic = realViewWidget.sliceLogic()
+          RV_cn = RVLogic.GetSliceCompositeNode()
+          RV_cn.SetBackgroundVolumeID(videoNode.GetID())
+          RVLogic.FitSliceToVolume(videoNode,1,1)
+          self.checkStreamingTimer.stop() 
