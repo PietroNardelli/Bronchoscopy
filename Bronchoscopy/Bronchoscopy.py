@@ -2,6 +2,7 @@ import os
 import unittest
 from __main__ import vtk, qt, ctk, slicer
 import numpy
+import numpy.linalg
 from vtk.util.numpy_support import vtk_to_numpy
 import csv
 import math
@@ -35,6 +36,13 @@ class BronchoscopyWidget:
       self.parent.setMRMLScene(slicer.mrmlScene)
     else:
       self.parent = parent
+
+
+    self.pendingUpdate = False
+    self.updatingFiducials = False
+    self.observeTags = []
+
+    self.addNewPathPoints = False
     
     self.layout = self.parent.layout()
     self.cameraNode = None
@@ -201,7 +209,7 @@ class BronchoscopyWidget:
     self.registrationSelector.setToolTip( "Select registration fiducial points" )
     #registrationFormLayout.addRow("Registration Fiducials List: ", self.registrationSelector)
 
-    self.createRegistrationFiducialsButton = qt.QPushButton("Create Registration Points")
+    self.createRegistrationFiducialsButton = qt.QPushButton("Create Registration Points List")
     self.createRegistrationFiducialsButton.toolTip = "Create fiducial list for the registration."
     self.createRegistrationFiducialsButton.setFixedSize(160,35)
     self.createRegistrationFiducialsButton.setStyleSheet("background-color: rgb(255,246,142)")
@@ -353,6 +361,8 @@ class BronchoscopyWidget:
     self.layout.addWidget(self.pathCreationCollapsibleButton)
     pathCreationFormLayout = qt.QFormLayout(self.pathCreationCollapsibleButton)
 
+    # Button To Create A Fiducial List Containing All The Points On The ROIs
+
     self.pointsListSelector = slicer.qMRMLNodeComboBox()
     self.pointsListSelector.nodeTypes = ( ("vtkMRMLMarkupsFiducialNode"), "" )
     self.pointsListSelector.selectNodeUponCreation = True
@@ -363,12 +373,62 @@ class BronchoscopyWidget:
     self.pointsListSelector.showHidden = False
     self.pointsListSelector.showChildNodeTypes = False
     self.pointsListSelector.setMRMLScene( slicer.mrmlScene )
-    self.pointsListSelector.setToolTip( "Select points for path creation." )
-    pathCreationFormLayout.addRow("Path(s) Points List: ", self.pointsListSelector)
+    self.pointsListSelector.setToolTip( "Select points indicating ROIs to reach." )
+    pathCreationFormLayout.addRow("ROI(s) Points List: ", self.pointsListSelector)
+
+    self.createROIFiducialsButton = qt.QPushButton("Add New ROI Point(s)")
+    self.createROIFiducialsButton.toolTip = "Add new ROI point(s)."
+    self.createROIFiducialsButton.setFixedSize(160,35)
+
+    ROIBox = qt.QHBoxLayout()
+    pathCreationFormLayout.addRow(ROIBox)
+
+    ROIBox.addWidget(self.pointsListSelector)
+    ROIBox.addWidget(self.createROIFiducialsButton)
+
+    # Button To Create A Fiducial List Containing The Points On The Labels Closest To The ROIs
+
+    self.labelPointsListSelector = slicer.qMRMLNodeComboBox()
+    self.labelPointsListSelector.nodeTypes = ( ("vtkMRMLMarkupsFiducialNode"), "" )
+    self.labelPointsListSelector.selectNodeUponCreation = True
+    self.labelPointsListSelector.addEnabled = True
+    self.labelPointsListSelector.baseName = 'LabelFiducials'
+    self.labelPointsListSelector.removeEnabled = True
+    self.labelPointsListSelector.noneEnabled = True
+    self.labelPointsListSelector.showHidden = False
+    self.labelPointsListSelector.showChildNodeTypes = False
+    self.labelPointsListSelector.setMRMLScene( slicer.mrmlScene )
+    self.labelPointsListSelector.setToolTip( "Select points on the label closest to the ROI." )
+    pathCreationFormLayout.addRow("Label(s) Points List: ", self.labelPointsListSelector)
+
+    self.createLabelsFiducialsButton = qt.QPushButton("Add New Label Points")
+    self.createLabelsFiducialsButton.toolTip = "Add point(s) on the closest labels to the ROIs."
+    self.createLabelsFiducialsButton.setFixedSize(160,35)
+
+    labelsBox = qt.QHBoxLayout()
+    pathCreationFormLayout.addRow(labelsBox)
+
+    labelsBox.addWidget(self.labelPointsListSelector)
+    labelsBox.addWidget(self.createLabelsFiducialsButton)
+
+    # Combobox listing all the ROIs points
+    self.ROIsPoints = qt.QComboBox()
+
+    # Button to create new path points
+    self.createNewPathPointsButton = qt.QPushButton("Add New Path Points")
+    self.createNewPathPointsButton.toolTip = "Add new path point(s) to improve path creation."
+    self.createNewPathPointsButton.setFixedSize(160,35)
+
+    ROIPoinntSelectionBox = qt.QHBoxLayout()
+    pathCreationFormLayout.addRow(ROIPoinntSelectionBox)
+
+    ROIPoinntSelectionBox.addWidget(self.ROIsPoints)
+    ROIPoinntSelectionBox.addWidget(self.createNewPathPointsButton)
     
     ###################################################################################
     #############################  Path Creation Button  ############################## 
     ###################################################################################
+    
     self.PathCreationButton = qt.QPushButton("Create Path(s)")
     self.PathCreationButton.toolTip = "Run the algorithm to create the path between the specified points."
     self.PathCreationButton.setFixedSize(300,50)
@@ -469,10 +529,6 @@ class BronchoscopyWidget:
     realImgSelectionBox = qt.QHBoxLayout()
     imgRegFormLayout.addRow(realImgSelectionBox)
 
-    #registrationBox = qt.QVBoxLayout()
-    #registrationFormLayout.addRow(registrationBox)
-    #registrationBox.addWidget(self.RegFidListButton,0,4)
-
     self.ImageRegistrationButton = qt.QPushButton("Start Image Registration")
     self.ImageRegistrationButton.toolTip = "Start registration between real and virtual images."
     self.ImageRegistrationButton.setFixedSize(250,50)
@@ -496,10 +552,6 @@ class BronchoscopyWidget:
 
     videoStreamingSelectionBox = qt.QHBoxLayout()
     videoStreamingFormLayout.addRow(videoStreamingSelectionBox)
-
-    #VSBox = qt.QVBoxLayout()
-    #videoStreamingFormLayout.addRow(VSBox)
-    #VSBox.addWidget(self.RegFidListButton,0,4)
 
     self.VideoRegistrationButton = qt.QPushButton("Start Video Streaming")
     self.VideoRegistrationButton.toolTip = "Stream the real video within the lung"
@@ -528,6 +580,11 @@ class BronchoscopyWidget:
     self.CreateFiducialListButton.connect('clicked(bool)',self.onCreateAndSaveFiducialList)
 
     self.pointsListSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
+    self.createROIFiducialsButton.connect('clicked(bool)', self.onCreateROIFiducialsList)
+    self.createLabelsFiducialsButton.connect('clicked(bool)', self.onCreateLabelsFiducialsList)
+    self.ROIsPoints.connect('currentIndexChanged(int)', self.showSelectedROI)
+    self.createNewPathPointsButton.connect('clicked(bool)', self.startAddingNewPathPoints)
+    
     self.PathCreationButton.connect('clicked(bool)', self.onPathCreationButton)
     self.pathModelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onPathSelect)
 
@@ -548,6 +605,20 @@ class BronchoscopyWidget:
     #
     self.updateGUI()
 
+    #
+    # Update ROIs List
+    #
+    self.updateList()
+
+  def updateList(self):
+    '''Observe the mrml scene for changes that we wish to respond to.'''
+    tag = slicer.mrmlScene.AddObserver(slicer.mrmlScene.EndCloseEvent, self.clearROIsComboBox)
+    tag = slicer.mrmlScene.AddObserver(slicer.mrmlScene.NodeAddedEvent, self.requestNodeAddedUpdate)
+    self.observeTags.append((slicer.mrmlScene,tag))
+
+  def clearROIsComboBox(self):
+    self.ROIsPoints.clear()    
+  
   def onSelect(self):
     self.updateGUI()
 
@@ -590,53 +661,6 @@ class BronchoscopyWidget:
 
     if self.points.GetNumberOfPoints() > 0:
       self.CreateFiducialListButton.enabled = True
-
-  def onPathSelect(self):
-    # Hide all paths and fiducials...
-    if len(self.pathModelNamesList) > 0:
-      for n in xrange(len(self.pathModelNamesList)):
-        pathName = self.pathModelNamesList[n]
-        pathNode = slicer.mrmlScene.GetNodesByName(pathName)
-        pathModel = pathNode.GetItemAsObject(0)
-        displayNode = pathModel.GetDisplayNode()
-        displayNode.SetVisibility(0)
-
-    fidNode =  self.pointsListSelector.currentNode()
-    fidDisplayNode = fidNode.GetDisplayNode()
-    fidDisplayNode.SetGlyphScale(8)
-    fidDisplayNode.SetTextScale(8)
-    
-    for i in xrange(fidNode.GetNumberOfFiducials()):        
-      fidNode.SetNthFiducialVisibility(i,0)
-     
-    # ...and show only the selected one
-    pathModel = self.pathModelSelector.currentNode()
-    displayNode = pathModel.GetDisplayNode()
-    displayNode.SetVisibility(1)
-
-    # Display fiducial corresponding to the selected path
-    name = pathModel.GetName()
-    idx = self.pathModelNamesList.index(name)
-    fidNode =  self.pointsListSelector.currentNode()
-    fidNode.SetNthFiducialVisibility(idx+1,1)
-
-    self.pathInfo(pathModel)
-
-  def pathInfo(self, model):
-    polyData = model.GetPolyData()
-    numberOfPoints = polyData.GetNumberOfPoints()
-    
-    firstPoint = [0,0,0]
-    polyData.GetPoint(numberOfPoints-1, firstPoint)
-    lastPoint = [0,0,0]
-    polyData.GetPoint(1, lastPoint)
-
-    squaredLength = vtk.vtkMath.Distance2BetweenPoints(firstPoint, lastPoint)
-    length = math.sqrt(squaredLength)
-    length = int(length)
-    length = str(length) + ' mm'        
-       
-    self.pathLength.setText(length)
 
   def disableButtonsAndSelectors(self):
 
@@ -797,23 +821,20 @@ class BronchoscopyWidget:
     if self.points.GetNumberOfPoints() > 0:
       self.CreateFiducialListButton.enabled = True
   
-    if self.fiducialNode:
+    '''if self.fiducialNode:
       FList = slicer.mrmlScene.GetNodesByName('F')
       AirwayFiducialList = slicer.mrmlScene.GetNodesByName('AirwayFiducial')
       PathFiducialList = slicer.mrmlScene.GetNodesByName('PathFiducial')
       markupLogic = slicer.modules.markups.logic()
+
       if FList.GetNumberOfItems() > 0:  
         markupsList = FList.GetItemAsObject(0)
       elif AirwayFiducialList.GetNumberOfItems() > 0:
         markupsList = AirwayFiducialList.GetItemAsObject(0)
       elif PathFiducialList.GetNumberOfItems() > 0:
         markupsList = PathFiducialList.GetItemAsObject(0)
-      else:
-        markupsList = slicer.vtkMRMLMarkupsFiducialNode()
-        markupsList.SetName('PathFiducial')
-        slicer.mrmlScene.AddNode(markupsList)
       
-      markupLogic.SetActiveListID(markupsList)      
+      markupLogic.SetActiveListID(markupsList)'''
 
     # Update GUI
     self.updateGUI()
@@ -1063,51 +1084,271 @@ class BronchoscopyWidget:
 
 
 #######################################################################################################
-########################################## PATH CREATION ############################################## 
+##################################### PATH CREATION AND INFO ########################################## 
 #######################################################################################################
+    
+  def onCreateROIFiducialsList(self):
+    ROIFiducialList = slicer.util.getNode('ROIFiducials')
+    markupLogic = slicer.modules.markups.logic()
+
+    if ROIFiducialList:
+      markupsList = ROIFiducialList
+    else:
+      markupsList = slicer.vtkMRMLMarkupsFiducialNode()
+      markupsList.SetName('ROIFiducials')
+      slicer.mrmlScene.AddNode(markupsList)
+
+    ROIFiducialList = slicer.util.getNode('ROIFiducials')
+    displayNode = ROIFiducialList.GetDisplayNode()
+    displayNode.SetGlyphScale(6)
+    displayNode.SetTextScale(1)
+
+    markupLogic.SetActiveListID(markupsList)
+    self.pointsListSelector.setCurrentNode(markupsList)
+
+    appLogic = slicer.app.applicationLogic()
+    selectionNode = appLogic.GetSelectionNode()
+    selectionNode .SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
+    interactionNode = appLogic.GetInteractionNode()
+    interactionNode.SwitchToPersistentPlaceMode()
+
+    self.updateGUI()
+    self.addFiducialObservers()
+
+  def addFiducialObservers(self):
+    '''Add observers to all fiducialLists in scene so we will know when new markups are added'''
+    self.removeFiducialObservers()
+    fiducialList = slicer.util.getNode('ROIFiducials')
+    tag = fiducialList.AddObserver(fiducialList.MarkupAddedEvent, self.requestNodeAddedUpdate)
+    self.observeTags.append((fiducialList,tag))
+
+  def removeFiducialObservers(self):
+    '''Remove any existing observer'''
+    for obj,tag in self.observeTags:
+      obj.RemoveObserver(tag)
+    self.obsverTags = []
+
+  def requestNodeAddedUpdate(self,caller,event):
+    '''Start a SingleShot timer that will check the fiducials in the scene and add them to the list'''
+    if not self.pendingUpdate:
+      qt.QTimer.singleShot(0,self.wrappedNodeAddedUpdate)
+      self.pendingUpdate = True
+
+  def wrappedNodeAddedUpdate(self):
+    try:
+      self.nodeAddedUpdate()
+    except Exception, e:
+      import traceback
+      traceback.print_exc()
+      qt.QMessageBox.warning(slicer.util.mainWindow(),
+                             "Node Added", 'Exception!\n\n' + str(e) + "\n\nSee Python Console for Stack Trace")
+  def nodeAddedUpdate(self):
+    if self.updatingFiducials:
+      return
+    
+    self.updatingFiducials = True
+    self.updateComboBox()
+    self.pendingUpdate = False
+    self.updatingFiducials = False
+
+  def updateComboBox(self):
+    '''Update the ROIs combobox'''
+    fiducialsLogic = slicer.modules.markups.logic()
+    activeListID = fiducialsLogic.GetActiveListID()
+    activeList = slicer.util.getNode(activeListID)
+
+    if activeList:
+      if activeList.GetNumberOfFiducials() > 0:
+        lastElement = activeList.GetNumberOfFiducials() - 1
+        self.ROIsPoints.addItem(activeList.GetNthFiducialLabel(lastElement))
+
+  def showSelectedROI(self):
+    fidIndex = self.ROIsPoints.currentIndex
+    ROIsList = slicer.util.getNode('ROIFiducials')
+    fidPosition = [0,0,0]
+    ROIsList.GetNthFiducialPosition(fidIndex, fidPosition)
+
+    lm = slicer.app.layoutManager()
+    yellowWidget = lm.sliceWidget('Yellow')
+    yellowLogic = yellowWidget.sliceLogic()
+    greenWidget = lm.sliceWidget('Green')
+    greenLogic = greenWidget.sliceLogic()
+    redWidget = lm.sliceWidget('Red')
+    redLogic = redWidget.sliceLogic() 
+    
+    yellowLogic.SetSliceOffset(fidPosition[0])
+    greenLogic.SetSliceOffset(fidPosition[1])
+    redLogic.SetSliceOffset(fidPosition[2])
+
+    if self.addNewPathPoints:
+      name = 'AddedPathPointsList-' + str(fidIndex+1)
+
+      AddedPathPointsList = slicer.util.getNode(name)
+
+      if AddedPathPointsList:
+        markupsList = AddedPathPointsList
+      else:
+        markupsList = slicer.vtkMRMLMarkupsFiducialNode()
+        markupsList.SetName(name)
+        slicer.mrmlScene.AddNode(markupsList)
+
+      markupLogic = slicer.modules.markups.logic()
+      markupLogic.SetActiveListID(markupsList)
+      self.labelPointsListSelector.setCurrentNode(markupsList)
+
+      AddedPathPointsList = slicer.util.getNode(name)
+      displayNode = AddedPathPointsList.GetDisplayNode()
+      displayNode.SetGlyphScale(3)
+      displayNode.SetTextScale(0)
+      AddedPathPointsList.AddFiducial(fidPosition[0],fidPosition[1],fidPosition[2])
+    
+  def onCreateLabelsFiducialsList(self):
+    LabelPointFiducialList = slicer.util.getNode('LabelsPoints')
+    markupLogic = slicer.modules.markups.logic()
+
+    if LabelPointFiducialList:
+      markupsList = LabelPointFiducialList
+    else:
+      markupsList = slicer.vtkMRMLMarkupsFiducialNode()
+      markupsList.SetName('LabelsPoints')
+      slicer.mrmlScene.AddNode(markupsList)
+
+    fidNode =  slicer.util.getNode('LabelsPoints')
+    fidDisplayNode = fidNode.GetDisplayNode()
+    fidDisplayNode.SetGlyphScale(3)
+    fidDisplayNode.SetTextScale(0)
+    
+    markupLogic.SetActiveListID(markupsList)
+    self.labelPointsListSelector.setCurrentNode(markupsList)
+
+    appLogic = slicer.app.applicationLogic()
+    selectionNode = appLogic.GetSelectionNode()
+    selectionNode .SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
+    interactionNode = appLogic.GetInteractionNode()
+    interactionNode.SwitchToPersistentPlaceMode()
+    
+    self.updateGUI()
+
+  def startAddingNewPathPoints(self):
+    
+    self.addNewPathPoints = True
+    appLogic = slicer.app.applicationLogic()
+    selectionNode = appLogic.GetSelectionNode()
+    selectionNode .SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
+    interactionNode = appLogic.GetInteractionNode()
+    interactionNode.SwitchToPersistentPlaceMode()
+
+    self.showSelectedROI()
+    
+    self.updateGUI()
 
   def onPathCreationButton(self):
-    fiducials = self.pointsListSelector.currentNode()
+    fiducials = slicer.util.getNode('LabelsPoints')
 
-    if fiducials.GetNumberOfFiducials() > 1 and fiducials.GetNumberOfFiducials() < 20:
+    if fiducials:
       self.disableButtonsAndSelectors()
 
-      # Create Centerline Path
-      self.pathComputation(self.inputSelector.currentNode(), fiducials) 
-    
+      # Create Centerline Path   
+      if self.points.GetNumberOfPoints() > 0:
+        self.CreateFiducialListButton.enabled = True
+      pos = [0,0,0]
+      targetPos = [0,0,0]
+      for i in xrange(self.ROIsPoints.count):
+        fiducials.GetNthFiducialPosition(i,targetPos)
+        firstPath = self.pathComputation(self.inputSelector.currentNode(), targetPos)
+        
+        listName = 'AddedPathPointsList-' + str(i+1)
+        AddedPathPointsList = slicer.util.getNode(listName)
+        
+        if AddedPathPointsList.GetNumberOfFiducials() > 0:
+          AddedPathPointsList.AddFiducial(targetPos[0],targetPos[1],targetPos[2])
+          computedPath = self.computeAddedPath(AddedPathPointsList)
+          secondPath = self.createAddedPath(computedPath)
+
+        # Merge the two path
+        appendFilter = vtk.vtkAppendPolyData()
+        appendFilter.AddInputData(firstPath)
+        appendFilter.AddInputData(secondPath)
+        appendFilter.Update()
+        
+        ############################ Make the path thicker #######################
+
+        tubeFilter = vtk.vtkTubeFilter()
+        tubeFilter.SetInputData(appendFilter.GetOutput())
+        tubeFilter.SetRadius(0.25)
+        tubeFilter.SetNumberOfSides(50)
+        tubeFilter.Update()
+
+        ############################ Create The 3D Model Of The Path And Add It To The Scene ############################################# 
+
+        model = slicer.vtkMRMLModelNode()
+        model.SetScene(slicer.mrmlScene)
+        model.SetName(slicer.mrmlScene.GenerateUniqueName("PathModel"))
+        model.SetAndObservePolyData(tubeFilter.GetOutput())
+
+        # Create display node
+        modelDisplay = slicer.vtkMRMLModelDisplayNode()
+        modelDisplay.SetColor(0,1,0) # green
+        modelDisplay.SetScene(slicer.mrmlScene)
+        modelDisplay.SetSliceIntersectionVisibility(1)
+        modelDisplay.SetSliceIntersectionThickness(5)
+        slicer.mrmlScene.AddNode(modelDisplay)
+        model.SetAndObserveDisplayNodeID(modelDisplay.GetID())
+
+        # Add to scene
+        if vtk.VTK_MAJOR_VERSION <= 5:
+          # shall not be needed.
+          modelDisplay.SetInputPolyData(model.GetPolyData())
+        slicer.mrmlScene.AddNode(model)
+
+        self.pathModelNamesList.append(model.GetName()) # Save names to delete models before creating the new ones.
+
+        ########################################### Merge Centerline Points with Path Points ###############################################
+        if self.points.GetNumberOfPoints() > 0:
+          pathPoints = self.createdPath.GetPoints()
+          for j in xrange(pathPoints.GetNumberOfPoints()):
+            self.points.InsertNextPoint(pathPoints.GetPoint(j))
+
+      #markupLogic = slicer.modules.markups.logic()
+      #markupLogic.SetActiveListID(targetPoints)
+      
+      self.pathCreated = 1
+      
+      slicer.mrmlScene.RemoveNode(fiducials)
+      ROINode = slicer.util.getNode('ROIFiducials')
+
+      for i in xrange(ROINode.GetNumberOfFiducials()):
+        name = 'AddedPathPointsList-'+str(i+1)
+        node = slicer.util.getNode(name)
+        slicer.mrmlScene.RemoveNode(node)
+
       self.enableSelectors()
       self.onSelect()
 
-      if self.points.GetNumberOfPoints() > 0:
-        self.CreateFiducialListButton.enabled = True
-
-      self.pathCreated = 1
-
     else:
-      string = 'The selected path fiducial list contains ' + str(fiducials.GetNumberOfFiducials()) + ' fiducials. Number of fiducials in the list must be between 2 and 20.'
+      string = 'The selected path fiducial list contains ' + str(fiducials.GetNumberOfFiducials()) + ' fiducials. Number of fiducials in the list must be >= 1.'
       raise Exception(string)
    
     # Update GUI
     self.updateGUI()
 
-  def pathComputation(self, inputModel, targetPoints):
+  def pathComputation(self, inputModel, targetPosition):
     """
     Run the actual algorithm to create the path between the 2 fiducials
     """
     import vtkSlicerPathExtractionClassesModuleLogic as vmtkLogic
 
-    if len(self.pathModelNamesList) > 0:
+    '''if len(self.pathModelNamesList) > 0:
       self.points = self.centerlinePoints
       for n in xrange(len(self.pathModelNamesList)):
         name = self.pathModelNamesList[n]
-        modelNode = slicer.mrmlScene.GetNodesByName(name)
-        model = modelNode.GetItemAsObject(0)
+        model = slicer.util.getNode(name)
         slicer.mrmlScene.RemoveNode(model)
-      self.pathModelNamesList = []
+      self.pathModelNamesList = []'''
         
     inputPolyData = inputModel.GetPolyData()
 
-    sourcePosition = [0,0,0]
+    #sourcePosition = [0,0,0]
 
     sourceId = vtk.vtkIdList()
     sourceId.SetNumberOfIds(1)
@@ -1118,20 +1359,21 @@ class BronchoscopyWidget:
 
     sourceId.InsertId(0,source)
 
-    targetPosition = [0,0,0]
     targetId = vtk.vtkIdList()
-    targetId.SetNumberOfIds(targetPoints.GetNumberOfFiducials()-1) 
+    targetId.SetNumberOfIds(1)
+
+    for i in xrange(0, 1):
+      #targetPoints.SetNthFiducialLabel(i,str(i))
+      #targetPoints.GetNthFiducialPosition(i,targetPosition) 
       
-    for i in range(1, targetPoints.GetNumberOfFiducials()):
-      targetPoints.SetNthFiducialLabel(i,str(i))
-      targetPoints.GetNthFiducialPosition(i,targetPosition)
       target = inputPolyData.FindPoint(targetPosition)
-      targetId.InsertId(i-1,target)
+      targetId.InsertId(i,target)
 
     pathCreation = vmtkLogic.vtkSlicerPathExtractionClassesPolyDataCenterlinesLogic()
 
     # Multiple paths for different ROIs are created!
 
+    self.createdPath = None
     for t in xrange(targetId.GetNumberOfIds()):
 
       tempTargetId = vtk.vtkIdList()
@@ -1150,50 +1392,9 @@ class BronchoscopyWidget:
     
       self.createdPath = pathCreation.GetOutput()
 
-      self.pathSmoothing(self.createdPath)
+      #self.pathSmoothing(self.createdPath)
 
-      ############################ Make the path thicker #######################
-
-      tubeFilter = vtk.vtkTubeFilter()
-      tubeFilter.SetInputData(self.createdPath)
-      tubeFilter.SetRadius(0.25)
-      tubeFilter.SetNumberOfSides(50)
-      tubeFilter.Update()
-
-      ############################ Create The 3D Model Of The Path And Add It To The Scene ############################################# 
-
-      model = slicer.vtkMRMLModelNode()
-      model.SetScene(slicer.mrmlScene)
-      model.SetName(slicer.mrmlScene.GenerateUniqueName("PathModel"))
-      model.SetAndObservePolyData(tubeFilter.GetOutput())
-
-      # Create display node
-      modelDisplay = slicer.vtkMRMLModelDisplayNode()
-      modelDisplay.SetColor(0,1,0) # green
-      modelDisplay.SetScene(slicer.mrmlScene)
-      modelDisplay.SetSliceIntersectionVisibility(1)
-      modelDisplay.SetSliceIntersectionThickness(10)
-      slicer.mrmlScene.AddNode(modelDisplay)
-      model.SetAndObserveDisplayNodeID(modelDisplay.GetID())
-
-      # Add to scene
-      if vtk.VTK_MAJOR_VERSION <= 5:
-        # shall not be needed.
-        modelDisplay.SetInputPolyData(model.GetPolyData())
-      slicer.mrmlScene.AddNode(model)
-
-      self.pathModelNamesList.append(model.GetName()) # Save names to delete models before creating the new ones.
-
-      ########################################### Merge Centerline Points with Path Points ###############################################
-      if self.points.GetNumberOfPoints() > 0:
-        pathPoints = self.createdPath.GetPoints()
-        for j in xrange(pathPoints.GetNumberOfPoints()):
-          self.points.InsertNextPoint(pathPoints.GetPoint(j))
-
-      markupLogic = slicer.modules.markups.logic()
-      markupLogic.SetActiveListID(targetPoints)
-
-    return True
+    return self.createdPath
      
   def pathSmoothing(self, pathModel):
       
@@ -1212,7 +1413,7 @@ class BronchoscopyWidget:
     
     if (squaredDist < 10.000) :
       smoothfactor = 1
-      iterations = 1000
+      iterations = 100
     else:
       smoothfactor = 1
       iterations = 100
@@ -1236,6 +1437,210 @@ class BronchoscopyWidget:
 
     #displayNode = fiducialList.GetDisplayNode()
     #displayNode.SetVisibility(0)
+
+  def computeAddedPath(self, fiducialListNode, dl=0.5):
+
+    self.dl = dl # desired world space step size (in mm)
+    self.dt = dl # current guess of parametric stepsize
+    self.fids = fiducialListNode
+
+    # hermite interpolation functions
+    self.h00 = lambda t: 2*t**3 - 3*t**2     + 1
+    self.h10 = lambda t:   t**3 - 2*t**2 + t
+    self.h01 = lambda t:-2*t**3 + 3*t**2
+    self.h11 = lambda t:   t**3 -   t**2
+
+    # n is the number of control points in the piecewise curve
+
+    if self.fids.GetClassName() == "vtkMRMLAnnotationHierarchyNode":
+      # slicer4 style hierarchy nodes
+      collection = vtk.vtkCollection()
+      self.fids.GetChildrenDisplayableNodes(collection)
+      self.n = collection.GetNumberOfItems()
+      if self.n == 0:
+        return
+      self.p = numpy.zeros((self.n,3))
+      for i in xrange(self.n):
+        f = collection.GetItemAsObject(i)
+        coords = [0,0,0]
+        f.GetFiducialCoordinates(coords)
+        self.p[i] = coords
+    elif self.fids.GetClassName() == "vtkMRMLMarkupsFiducialNode":
+      # slicer4 Markups node
+      self.n = self.fids.GetNumberOfFiducials()
+      n = self.n
+      if n == 0:
+        return
+      # get fiducial positions
+      # sets self.p
+      self.p = numpy.zeros((n,3))
+      for i in xrange(n):
+        coord = [0.0, 0.0, 0.0]
+        self.fids.GetNthFiducialPosition(i, coord)
+        self.p[i] = coord
+    else:
+      # slicer3 style fiducial lists
+      self.n = self.fids.GetNumberOfFiducials()
+      n = self.n
+      if n == 0:
+        return
+      # get control point data
+      # sets self.p
+      self.p = numpy.zeros((n,3))
+      for i in xrange(n):
+        self.p[i] = self.fids.GetNthFiducialXYZ(i)
+
+    # calculate the tangent vectors
+    # - fm is forward difference
+    # - m is average of in and out vectors
+    # - first tangent is out vector, last is in vector
+    # - sets self.m
+    n = self.n
+    fm = numpy.zeros((n,3))
+    for i in xrange(0,n-1):
+      fm[i] = self.p[i+1] - self.p[i]
+    self.m = numpy.zeros((n,3))
+    for i in xrange(1,n-1):
+      self.m[i] = (fm[i-1] + fm[i]) / 2.
+    self.m[0] = fm[0]
+    self.m[n-1] = fm[n-2]
+
+    self.AddedPath = [self.p[0]]
+    self.calculateAddedPath()
+    
+    return self.AddedPath
+
+  def calculateAddedPath(self):
+    """ Generate a flight path for of steps of length dl """
+    #
+    # calculate the actual path
+    # - take steps of self.dl in world space
+    # -- if dl steps into next segment, take a step of size "remainder" in the new segment
+    # - put resulting points into self.path
+    #
+    n = self.n
+    segment = 0 # which first point of current segment
+    t = 0 # parametric current parametric increment
+    remainder = 0 # how much of dl isn't included in current step
+    while segment < n-1:
+      t, p, remainder = self.addedPathStep(segment, t, self.dl)
+      if remainder != 0 or t == 1.:
+        segment += 1
+        t = 0
+        if segment < n-1:
+          t, p, remainder = self.addedPathStep(segment, t, remainder)
+      self.AddedPath.append(p)
+
+  def AddedPoint(self,segment,t):
+    return (self.h00(t)*self.p[segment] +
+              self.h10(t)*self.m[segment] +
+              self.h01(t)*self.p[segment+1] +
+              self.h11(t)*self.m[segment+1])
+
+  def addedPathStep(self,segment,t,dl):
+    """ Take a step of dl and return the path point and new t
+      return:
+      t = new parametric coordinate after step
+      p = point after step
+      remainder = if step results in parametic coordinate > 1.0, then
+        this is the amount of world space not covered by step
+    """
+    p0 = self.AddedPath[self.AddedPath.__len__() - 1] # last element in path
+    remainder = 0
+    ratio = 100
+    count = 0
+    while abs(1. - ratio) > 0.05:
+      t1 = t + self.dt
+      pguess = self.AddedPoint(segment,t1)
+      dist = numpy.linalg.norm(pguess - p0)
+      ratio = self.dl / dist
+      self.dt *= ratio
+      if self.dt < 0.00000001:
+        return
+      count += 1
+      if count > 500:
+        return (t1, pguess, 0)
+    if t1 > 1.:
+      t1 = 1.
+      p1 = self.AddedPoint(segment, t1)
+      remainder = numpy.linalg.norm(p1 - pguess)
+      pguess = p1
+    return (t1, pguess, remainder)
+
+  def createAddedPath(self,path):
+
+    scene = slicer.mrmlScene
+
+    points = vtk.vtkPoints()
+    polyData = vtk.vtkPolyData()
+    polyData.SetPoints(points)
+
+    lines = vtk.vtkCellArray()
+    polyData.SetLines(lines)
+    linesIDArray = lines.GetData()
+    linesIDArray.Reset()
+    linesIDArray.InsertNextTuple1(0)
+
+    polygons = vtk.vtkCellArray()
+    polyData.SetPolys( polygons )
+    idArray = polygons.GetData()
+    idArray.Reset()
+    idArray.InsertNextTuple1(0)
+
+    for point in path:
+      pointIndex = points.InsertNextPoint(*point)
+      linesIDArray.InsertNextTuple1(pointIndex)
+      linesIDArray.SetTuple1( 0, linesIDArray.GetNumberOfTuples() - 1 )
+      lines.SetNumberOfCells(1)
+
+    return polyData
+   
+  def onPathSelect(self):
+    # Hide all paths and fiducials...
+    if len(self.pathModelNamesList) > 0:
+      for n in xrange(len(self.pathModelNamesList)):
+        pathName = self.pathModelNamesList[n]
+        pathModel = slicer.util.getNode(pathName)
+        displayNode = pathModel.GetDisplayNode()
+        displayNode.SetVisibility(0)
+
+    fidNode =  slicer.util.getNode('ROIFiducials')
+    fidDisplayNode = fidNode.GetDisplayNode()
+    fidDisplayNode.SetGlyphScale(8)
+    fidDisplayNode.SetTextScale(8)
+    
+    for i in xrange(fidNode.GetNumberOfFiducials()):        
+      fidNode.SetNthFiducialVisibility(i,0)
+      fidNode.SetNthFiducialLabel(i,str(i+1))
+     
+    # ...and show only the selected one
+    pathModel = self.pathModelSelector.currentNode()
+    displayNode = pathModel.GetDisplayNode()
+    displayNode.SetVisibility(1)
+
+    # Display fiducial corresponding to the selected path
+    name = pathModel.GetName()
+    idx = self.pathModelNamesList.index(name)
+    #fidNode =  self.pointsListSelector.currentNode()
+    fidNode.SetNthFiducialVisibility(idx,1)
+
+    self.pathInfo(pathModel)
+
+  def pathInfo(self, model):
+    polyData = model.GetPolyData()
+    numberOfPoints = polyData.GetNumberOfPoints()
+    
+    firstPoint = [0,0,0]
+    polyData.GetPoint(numberOfPoints-1, firstPoint)
+    lastPoint = [0,0,0]
+    polyData.GetPoint(1, lastPoint)
+
+    squaredLength = vtk.vtkMath.Distance2BetweenPoints(firstPoint, lastPoint)
+    length = math.sqrt(squaredLength)
+    length = int(length)
+    length = str(length) + ' mm'        
+       
+    self.pathLength.setText(length)
 
   def delayDisplay(self,message,msec=1000):
     #
@@ -1312,9 +1717,8 @@ class BronchoscopyWidget:
         else:
           self.centerlineCompensationTransform = centerlineCompensationTransformNodes.GetItemAsObject(0)
 
-      needleModelNodes = slicer.mrmlScene.GetNodesByName('ProbeModel')
-      if needleModelNodes.GetNumberOfItems() > 0:
-        probeNode = needleModelNodes.GetItemAsObject(0)
+      probeNode = slicer.util.getNode('ProbeModel')
+      if probeNode:
         probeDisplayNode = probeNode.GetDisplayNode()
         probeDisplayNode.SetColor(0, 0, 1)
         probeDisplayNode.SetSliceIntersectionVisibility(1)
@@ -1444,9 +1848,8 @@ class BronchoscopyWidget:
         viewUp = [0.0,0.0,-1.0]
         self.cameraForNavigation.SetViewUp(viewUp)
       else:
-        tNodeCollections = slicer.mrmlScene.GetNodesByName('centerlineCompensationTransform')
-        if tNodeCollections.GetNumberOfItems() > 0:
-          tNode = tNodeCollections.GetItemAsObject(0)
+        tNode = slicer.util.getNode('centerlineCompensationTransform')
+        if tNode:
           transformMatrix = vtk.vtkMatrix4x4()
           tNode.GetMatrixTransformToParent(transformMatrix)
           pos = [0,0,0]
@@ -1546,8 +1949,7 @@ class BronchoscopyWidget:
 
   def registerImage(self):
     # Read the real image
-    videoNodesCollcetion = slicer.mrmlScene.GetNodesByName('Image_Reference')
-    videoNode = videoNodesCollcetion.GetItemAsObject(0)
+    videoNode = slicer.util.getNode('Image_Reference')
 
     # Crop image to remove the info part on the left side
     VOIExtract = vtk.vtkExtractVOI()
@@ -1668,8 +2070,7 @@ class BronchoscopyWidget:
   def showVideoStreaming(self):
     if self.videoStreamingNode != None: 
       if self.videoStreamingNode.GetState() == 2:
-        videoNodesCollection = slicer.mrmlScene.GetNodesByName('Image_Reference')
-        videoNode = videoNodesCollection.GetItemAsObject(0)
+        videoNode = slicer.util.getNode('Image_Reference')
         if videoNode:
           realViewWidget = self.layoutManager.sliceWidget('RealView')
           RVLogic = realViewWidget.sliceLogic()
