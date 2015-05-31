@@ -1191,16 +1191,19 @@ class BronchoscopyWidget:
         markupsList = slicer.vtkMRMLMarkupsFiducialNode()
         markupsList.SetName(name)
         slicer.mrmlScene.AddNode(markupsList)
+        AddedPathPointsList = slicer.util.getNode(name)
+        displayNode = AddedPathPointsList.GetDisplayNode()
+        displayNode.SetGlyphScale(3)
+        displayNode.SetTextScale(0)
+        displayNode.SetSelectedColor((55,255,0))
+      
+      AddedPathPointsList.AddFiducial(fidPosition[0],fidPosition[1],fidPosition[2])
 
       markupLogic = slicer.modules.markups.logic()
       markupLogic.SetActiveListID(markupsList)
       self.labelPointsListSelector.setCurrentNode(markupsList)
 
-      AddedPathPointsList = slicer.util.getNode(name)
-      displayNode = AddedPathPointsList.GetDisplayNode()
-      displayNode.SetGlyphScale(3)
-      displayNode.SetTextScale(0)
-      AddedPathPointsList.AddFiducial(fidPosition[0],fidPosition[1],fidPosition[2])
+
     
   def onCreateLabelsFiducialsList(self):
     LabelPointFiducialList = slicer.util.getNode('LabelsPoints')
@@ -1217,6 +1220,7 @@ class BronchoscopyWidget:
     fidDisplayNode = fidNode.GetDisplayNode()
     fidDisplayNode.SetGlyphScale(3)
     fidDisplayNode.SetTextScale(0)
+    fidDisplayNode.SetSelectedColor((0,255,255))
     
     markupLogic.SetActiveListID(markupsList)
     self.labelPointsListSelector.setCurrentNode(markupsList)
@@ -1259,24 +1263,30 @@ class BronchoscopyWidget:
         
         listName = 'AddedPathPointsList-' + str(i+1)
         AddedPathPointsList = slicer.util.getNode(listName)
-        
-        if AddedPathPointsList.GetNumberOfFiducials() > 0:
-          AddedPathPointsList.AddFiducial(targetPos[0],targetPos[1],targetPos[2])
-          computedPath = self.computeAddedPath(AddedPathPointsList)
-          secondPath = self.createAddedPath(computedPath)
 
-        # Merge the two path
-        appendFilter = vtk.vtkAppendPolyData()
-        appendFilter.AddInputData(firstPath)
-        appendFilter.AddInputData(secondPath)
-        appendFilter.Update()
+        if AddedPathPointsList:
+          if AddedPathPointsList.GetNumberOfFiducials() > 0:
+            AddedPathPointsList.AddFiducial(targetPos[0],targetPos[1],targetPos[2])
+            computedPath = self.computeAddedPath(AddedPathPointsList)
+            secondPath = self.createAddedPath(computedPath)
+
+          # Merge the two path
+          appendFilter = vtk.vtkAppendPolyData()
+          appendFilter.AddInputData(firstPath)
+          appendFilter.AddInputData(secondPath)
+          appendFilter.Update()
         
         ############################ Make the path thicker #######################
-
         tubeFilter = vtk.vtkTubeFilter()
-        tubeFilter.SetInputData(appendFilter.GetOutput())
-        tubeFilter.SetRadius(0.25)
-        tubeFilter.SetNumberOfSides(50)
+        if AddedPathPointsList:
+          tubeFilter.SetInputData(appendFilter.GetOutput())
+          tubeFilter.SetRadius(0.25)
+          tubeFilter.SetNumberOfSides(50)
+        else:
+          tubeFilter.SetInputData(firstPath)
+          tubeFilter.SetRadius(0.25)
+          tubeFilter.SetNumberOfSides(50)          
+
         tubeFilter.Update()
 
         ############################ Create The 3D Model Of The Path And Add It To The Scene ############################################# 
@@ -1305,12 +1315,10 @@ class BronchoscopyWidget:
 
         ########################################### Merge Centerline Points with Path Points ###############################################
         if self.points.GetNumberOfPoints() > 0:
-          pathPoints = self.createdPath.GetPoints()
+          path = tubeFilter.GetOutput()
+          pathPoints = path.GetPoints()
           for j in xrange(pathPoints.GetNumberOfPoints()):
             self.points.InsertNextPoint(pathPoints.GetPoint(j))
-
-      #markupLogic = slicer.modules.markups.logic()
-      #markupLogic.SetActiveListID(targetPoints)
       
       self.pathCreated = 1
       
@@ -1348,8 +1356,6 @@ class BronchoscopyWidget:
         
     inputPolyData = inputModel.GetPolyData()
 
-    #sourcePosition = [0,0,0]
-
     sourceId = vtk.vtkIdList()
     sourceId.SetNumberOfIds(1)
 
@@ -1362,10 +1368,7 @@ class BronchoscopyWidget:
     targetId = vtk.vtkIdList()
     targetId.SetNumberOfIds(1)
 
-    for i in xrange(0, 1):
-      #targetPoints.SetNthFiducialLabel(i,str(i))
-      #targetPoints.GetNthFiducialPosition(i,targetPosition) 
-      
+    for i in xrange(0, 1):  
       target = inputPolyData.FindPoint(targetPosition)
       targetId.InsertId(i,target)
 
@@ -1404,12 +1407,10 @@ class BronchoscopyWidget:
     position = NumberOfPoints-1
     startingPoint = [0,0,0]
     pathModel.GetPoint(position,startingPoint)
-    #print "Starting point centerline: ",startingPoint
     targetPosition = [0,0,0]
     pathModel.GetPoint(1,targetPosition)
            
     squaredDist = vtk.vtkMath.Distance2BetweenPoints(startingPoint,targetPosition)
-    #print squaredDist 
     
     if (squaredDist < 10.000) :
       smoothfactor = 1
@@ -1426,17 +1427,6 @@ class BronchoscopyWidget:
     
     self.createdPath = centerlineSmoothing.GetOutput()
 
-  #def CreateFiducialsPath(self, pathPolyData, fiducialList):
-    #NoP = pathPolyData.GetNumberOfPoints()    
-    #NthFiducial = 0
-    #point = [0,0,0]
-    #for i in xrange(NoP):
-      #pathPolyData.GetPoint(i,point)
-      #fiducialList.AddFiducial(point[0],point[1],point[2])
-      #NthFiducial += 1
-
-    #displayNode = fiducialList.GetDisplayNode()
-    #displayNode.SetVisibility(0)
 
   def computeAddedPath(self, fiducialListNode, dl=0.5):
 
@@ -1661,6 +1651,7 @@ class BronchoscopyWidget:
 
   def onProbeTrackButtonToggled(self, checked):     
     if checked:
+      self.updateGUI()
       self.ProbeTrackButton.setStyleSheet("background-color: rgb(255,156,126)")
 
       #if self.fiducialListSelector.currentNode():
@@ -1686,8 +1677,6 @@ class BronchoscopyWidget:
       self.cNode.SetType(1)
       self.cNode.SetTypeServer(18944)
       self.cNode.Start()
-
-      self.onResetCameraButtonPressed()
 
       ################## This turns the probe of 90 degrees when the tracking is started the first time #####################
 
@@ -1743,11 +1732,16 @@ class BronchoscopyWidget:
           #probePositionIndicator.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
 
       ################## Camera 1 is connected to the transform #####################
-
+         
+      self.onResetCameraButtonPressed()
       self.cameraForNavigation.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
+      
+      ####################### Set clipping range for the first camera ####################
+      camera = self.cameraForNavigation.GetCamera()
+      camera.SetClippingRange(0.7081381565016212, 708.1381565016211) # to be checked
 
       ########## Camera 2 is will automatically follow the probe ##########
-      cameraNodes = slicer.mrmlScene.GetNodesByClass('vtkMRMLCameraNode')
+      cameraNodes = slicer.mrmlScene.GetNodesByName('Default Scene Camera')
       self.secondCamera = cameraNodes.GetItemAsObject(1)
       self.secondCamera.SetFocalPoint(-1.0,0.0,0.0)
       secCamera = self.secondCamera.GetCamera()
@@ -1768,7 +1762,6 @@ class BronchoscopyWidget:
       if self.points.GetNumberOfPoints()>0:
         for i in xrange(self.points.GetNumberOfPoints()):
           point = self.points.GetPoint(i)
-          #print point
           p = [point[0],point[1],point[2]]
           self.pointsList.append(p)
 
@@ -1776,10 +1769,6 @@ class BronchoscopyWidget:
         self.pointsList = numpy.array([list(x) for x in set(tuple(x) for x in self.pointsList)])
         self.pointsList.tolist()
  
-      ####################### Set clipping range for the first camera ####################
-      camera = self.cameraForNavigation.GetCamera()
-      camera.SetClippingRange(0.7081381565016212, 708.1381565016211) # to be checked
-
       self.sensorTimer.start()
        
       self.layoutManager = slicer.app.layoutManager()
@@ -1839,7 +1828,7 @@ class BronchoscopyWidget:
           self.CheckCurrentPosition(transformMatrix)
   
   def onResetCameraButtonPressed(self):
-    cameraNodes = slicer.mrmlScene.GetNodesByClass('vtkMRMLCameraNode')
+    cameraNodes = slicer.mrmlScene.GetNodesByName('Default Scene Camera')
     self.cameraForNavigation = cameraNodes.GetItemAsObject(0)
     if cameraNodes.GetNumberOfItems() > 0:
       if self.cameraForNavigation.GetTransformNodeID() == None:
@@ -1906,6 +1895,8 @@ class BronchoscopyWidget:
     pos = [0,0,0]
     self.secondCamera.SetFocalPoint(x,y,z)
     self.secondCamera.SetPosition(x,y+250,z)
+    
+    self.cameraForNavigation.SetPosition(x,y,z)
   
     pathModel = self.pathModelSelector.currentNode()
     pathPolyData = pathModel.GetPolyData()
@@ -1956,10 +1947,10 @@ class BronchoscopyWidget:
     VOIExtract.SetInputConnection(videoNode.GetImageDataConnection())
     VOIExtract.SetVOI(180,571,58,430,0,0)
     VOIExtract.Update()
-    w = vtk.vtkPNGWriter()
+    '''w = vtk.vtkPNGWriter()
     w.SetInputConnection(VOIExtract.GetOutputPort())
     w.SetFileName('C:/Users/Lab/Desktop/text.png')
-    w.Write()
+    w.Write()'''
     
     # Flip image about x
     realImageFlip = vtk.vtk.vtkImageFlip()
@@ -2028,7 +2019,6 @@ class BronchoscopyWidget:
     slicer.mrmlScene.AddNode(movingScalarVolume)
 
     anglesNumber = 36
-    #print anglesNumber
     imageRegistration = slicer.modules.imageregistrationcli
     parameters = {
           "fixedImage": realScalarVolume,
