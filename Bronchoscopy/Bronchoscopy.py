@@ -276,6 +276,9 @@ class BronchoscopyWidget:
       modelDisplayNode.SetColor(1.0, 0.8, 0.7)
       modelDisplayNode.SetFrontfaceCulling(1)
       modelDisplayNode.SetBackfaceCulling(0)
+      modelDisplayNode.SetAmbient(0.08)
+      modelDisplayNode.SetDiffuse(0.90)
+      modelDisplayNode.SetSpecular(0.17)
 
     ###################################################################################
     ###############################  Label Selector  ##################################
@@ -1108,11 +1111,11 @@ class BronchoscopyWidget:
 
     appLogic = slicer.app.applicationLogic()
     selectionNode = appLogic.GetSelectionNode()
-    selectionNode .SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
+    selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
     interactionNode = appLogic.GetInteractionNode()
     interactionNode.SwitchToPersistentPlaceMode()
 
-    self.updateGUI()
+    #self.updateGUI()
     self.addFiducialObservers()
 
   def addFiducialObservers(self):
@@ -1196,8 +1199,8 @@ class BronchoscopyWidget:
         displayNode.SetGlyphScale(3)
         displayNode.SetTextScale(0)
         displayNode.SetSelectedColor((55,255,0))
-      
-      AddedPathPointsList.AddFiducial(fidPosition[0],fidPosition[1],fidPosition[2])
+
+        AddedPathPointsList.AddFiducial(fidPosition[0],fidPosition[1],fidPosition[2])
 
       markupLogic = slicer.modules.markups.logic()
       markupLogic.SetActiveListID(markupsList)
@@ -1227,24 +1230,24 @@ class BronchoscopyWidget:
 
     appLogic = slicer.app.applicationLogic()
     selectionNode = appLogic.GetSelectionNode()
-    selectionNode .SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
+    selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
     interactionNode = appLogic.GetInteractionNode()
     interactionNode.SwitchToPersistentPlaceMode()
     
-    self.updateGUI()
+    #self.updateGUI()
 
   def startAddingNewPathPoints(self):
     
     self.addNewPathPoints = True
     appLogic = slicer.app.applicationLogic()
     selectionNode = appLogic.GetSelectionNode()
-    selectionNode .SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
+    selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
     interactionNode = appLogic.GetInteractionNode()
     interactionNode.SwitchToPersistentPlaceMode()
 
     self.showSelectedROI()
     
-    self.updateGUI()
+    #self.updateGUI()
 
   def onPathCreationButton(self):
     fiducials = slicer.util.getNode('LabelsPoints')
@@ -1280,11 +1283,11 @@ class BronchoscopyWidget:
         tubeFilter = vtk.vtkTubeFilter()
         if AddedPathPointsList:
           tubeFilter.SetInputData(appendFilter.GetOutput())
-          tubeFilter.SetRadius(0.25)
+          tubeFilter.SetRadius(0.2)
           tubeFilter.SetNumberOfSides(50)
         else:
           tubeFilter.SetInputData(firstPath)
-          tubeFilter.SetRadius(0.25)
+          tubeFilter.SetRadius(0.2)
           tubeFilter.SetNumberOfSides(50)          
 
         tubeFilter.Update()
@@ -1300,6 +1303,7 @@ class BronchoscopyWidget:
         modelDisplay = slicer.vtkMRMLModelDisplayNode()
         modelDisplay.SetColor(0,1,0) # green
         modelDisplay.SetScene(slicer.mrmlScene)
+        modelDisplay.LightingOff()
         modelDisplay.SetSliceIntersectionVisibility(1)
         modelDisplay.SetSliceIntersectionThickness(5)
         slicer.mrmlScene.AddNode(modelDisplay)
@@ -1339,6 +1343,11 @@ class BronchoscopyWidget:
    
     # Update GUI
     self.updateGUI()
+    appLogic = slicer.app.applicationLogic()
+    selectionNode = appLogic.GetSelectionNode()
+    selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
+    interactionNode = appLogic.GetInteractionNode()
+    interactionNode.Reset()
 
   def pathComputation(self, inputModel, targetPosition):
     """
@@ -1615,6 +1624,7 @@ class BronchoscopyWidget:
     fidNode.SetNthFiducialVisibility(idx,1)
 
     self.pathInfo(pathModel)
+    self.updateGUI()
 
   def pathInfo(self, model):
     polyData = model.GetPolyData()
@@ -1833,7 +1843,7 @@ class BronchoscopyWidget:
     if cameraNodes.GetNumberOfItems() > 0:
       if self.cameraForNavigation.GetTransformNodeID() == None:
         self.cameraForNavigation.SetPosition(-1.0,0.0,0.0)
-        self.cameraForNavigation.SetFocalPoint(-5.0,0.0,0.0)
+        self.cameraForNavigation.SetFocalPoint(-5.0,0.0,.0)
         viewUp = [0.0,0.0,-1.0]
         self.cameraForNavigation.SetViewUp(viewUp)
       else:
@@ -1897,6 +1907,20 @@ class BronchoscopyWidget:
     self.secondCamera.SetPosition(x,y+250,z)
     
     self.cameraForNavigation.SetPosition(x,y,z)
+    camera=self.cameraForNavigation.GetCamera()
+    '''p = camera.GetPosition()
+    vpn = camera.GetViewPlaneNormal()
+    print "position: ",p
+    print "VPN: ", vpn
+    p=numpy.asarray(p)
+    vpn=numpy.asarray(vpn)
+    theorFP = p-4*vpn
+    print "Theoretical FP: ", theorFP
+    print "real prev FP: ", camera.GetFocalPoint()
+    d=[0,0,0]
+    #self.cameraForNavigation.SetFocalPoint(theorFP)
+    self.cameraForNavigation.GetFocalPoint(d)
+    print "real new FP: ", d'''  
   
     pathModel = self.pathModelSelector.currentNode()
     pathPolyData = pathModel.GetPolyData()
@@ -2055,6 +2079,7 @@ class BronchoscopyWidget:
         self.checkStreamingTimer.start()
     else:
       if self.videoStreamingNode != None:
+        self.VideoRegistrationButton.setText("Stop Video Streaming")
         self.videoStreamingNode.Stop()      
 
   def showVideoStreaming(self):
