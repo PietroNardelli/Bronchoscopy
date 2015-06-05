@@ -92,8 +92,6 @@ class BronchoscopyWidget:
 
     self.updateGUI()
 
-    self.improveCTContrast()
-
     if not parent:
       self.setup()
       self.parent.show()
@@ -165,13 +163,14 @@ class BronchoscopyWidget:
     self.secondThreeDView.resetFocalPoint()
     self.secondThreeDView.lookFromViewAxis(ctk.ctkAxesWidget().Anterior)
 
-    self.improveCTContrast()
-
-  def improveCTContrast(self):
     red_logic = slicer.app.layoutManager().sliceWidget("Red").sliceLogic()
     red_cn = red_logic.GetSliceCompositeNode()
     volumeID = red_cn.GetBackgroundVolumeID()
-    volume = slicer.util.getNode(volumeID)
+    if volumeID:
+      self.improveCTContrast(volumeID)
+      
+  def improveCTContrast(self, volID):
+    volume = slicer.util.getNode(volID)
     displayNode = volume.GetDisplayNode()
     displayNode.SetAutoWindowLevel(0)
     displayNode.SetWindowLevel(1400,-500)
@@ -1339,7 +1338,7 @@ class BronchoscopyWidget:
         tubeFilter = vtk.vtkTubeFilter()
         if AddedPathPointsList:
           tubeFilter.SetInputData(appendFilter.GetOutput())
-          tubeFilter.SetRadius(0.15)
+          tubeFilter.SetRadius(0.1)
           tubeFilter.SetNumberOfSides(50)
         else:
           tubeFilter.SetInputData(firstPath)
@@ -1460,7 +1459,7 @@ class BronchoscopyWidget:
     
       self.createdPath = pathCreation.GetOutput()
 
-      #self.pathSmoothing(self.createdPath)
+      self.pathSmoothing(self.createdPath)
 
     return self.createdPath
      
@@ -1477,17 +1476,17 @@ class BronchoscopyWidget:
            
     squaredDist = vtk.vtkMath.Distance2BetweenPoints(startingPoint,targetPosition)
     
-    if (squaredDist < 10.000) :
+    '''if (squaredDist < 10.000) :
       smoothfactor = 1
       iterations = 100
     else:
       smoothfactor = 1
-      iterations = 100
+      iterations = 10'''
       
     centerlineSmoothing = vmtkLogic.vtkSlicerPathExtractionClassesCenterlineSmoothingLogic()
     centerlineSmoothing.SetInputData(pathModel)
-    centerlineSmoothing.SetNumberOfSmoothingIterations(iterations)
-    centerlineSmoothing.SetSmoothingFactor(smoothfactor)
+    centerlineSmoothing.SetNumberOfSmoothingIterations(10)
+    centerlineSmoothing.SetSmoothingFactor(1)
     centerlineSmoothing.Update()
     
     self.createdPath = centerlineSmoothing.GetOutput()
@@ -1922,7 +1921,7 @@ class BronchoscopyWidget:
           self.cameraForNavigation.GetFocalPoint(fp)
           self.cameraForNavigation.SetFocalPoint(fp[0],fp[1],fp[2])
 
-      self.cameraForNavigation.SetViewAngle(50)
+      self.cameraForNavigation.SetViewAngle(55)
       
   def CheckCurrentPosition(self, tMatrix):
 
@@ -1967,8 +1966,9 @@ class BronchoscopyWidget:
     pos = [0,0,0]
     self.secondCamera.SetFocalPoint(x,y,z)
     self.secondCamera.SetPosition(x,y+250,z)
-    
-    self.cameraForNavigation.SetPosition(x,y,z)
+
+    # force the camera position to be a bit higher to better watch the path
+    self.cameraForNavigation.SetPosition(x,y,z-1)
     camera=self.cameraForNavigation.GetCamera()
     '''p = camera.GetPosition()
     vpn = camera.GetViewPlaneNormal()
@@ -1993,7 +1993,7 @@ class BronchoscopyWidget:
     numberOfPoints = polyData.GetNumberOfPoints()
     
     firstPoint = [0,0,0]
-    polyData.GetPoint(1, firstPoint)
+    polyData.GetPoint(numberOfPoints-1, firstPoint)
 
     squaredDistance = vtk.vtkMath.Distance2BetweenPoints(firstPoint, secondPoint)
     length = math.sqrt(squaredDistance)
@@ -2037,20 +2037,27 @@ class BronchoscopyWidget:
     videoNode = slicer.util.getNode('Image_Reference')
 
     # Crop image to remove the info part on the left side
-    VOIExtract = vtk.vtkExtractVOI()
+    '''VOIExtract = vtk.vtkExtractVOI()
     VOIExtract.SetInputConnection(videoNode.GetImageDataConnection())
     VOIExtract.SetVOI(180,571,58,430,0,0)
     VOIExtract.Update()
-    '''w = vtk.vtkPNGWriter()
+    w = vtk.vtkPNGWriter()
     w.SetInputConnection(VOIExtract.GetOutputPort())
     w.SetFileName('C:/Users/Lab/Desktop/text.png')
     w.Write()'''
     
     # Flip image about x
-    realImageFlip = vtk.vtk.vtkImageFlip()
-    realImageFlip.SetFilteredAxis(0)
-    realImageFlip.SetInputConnection(VOIExtract.GetOutputPort())
-    realImageFlip.Update()
+    realImageFlipX = vtk.vtkImageFlip()
+    realImageFlipX.SetFilteredAxis(0)
+    #realImageFlipX.SetInputConnection(VOIExtract.GetOutputPort())
+    realImageFlipX.SetInputConnection(videoNode.GetImageDataConnection())
+
+    # Flip image about y
+    realImageFlipY = vtk.vtkImageFlip()
+    realImageFlipY.SetFilteredAxis(1)
+    realImageFlipY.SetInputConnection(realImageFlipX.GetOutputPort())    
+
+    realImageFlipY.Update()
     
     # Convert image to gray-scale 
     realExtract = vtk.vtkImageExtractComponents()
@@ -2058,11 +2065,12 @@ class BronchoscopyWidget:
     realLuminance = vtk.vtkImageLuminance()
     
     if vtk.VTK_MAJOR_VERSION <= 5:
-      realExtract.SetInput(realImageFlip.GetOutput())
+      realExtract.SetInput(realImageFlipY.GetOutput())
       realLuminance.SetInput(realExtract.GetOutput())
       realLuminance.GetOutput().Update() 
     else:
-      realExtract.SetInputConnection(realImageFlip.GetOutputPort())
+      #realExtract.SetInputConnection(realImageFlip.GetOutputPort())
+      realExtract.SetInputConnection(realImageFlipY.GetOutputPort())
       realLuminance.SetInputConnection(realExtract.GetOutputPort())
       realLuminance.Update()
 
@@ -2077,11 +2085,18 @@ class BronchoscopyWidget:
     slicer.mrmlScene.AddNode(realScalarVolume)
 
     # Grab 3D view screenshot
+    #pathModel = self.pathModelSelector.currentNode()
+    #displayNode = pathModel.GetDisplayNode()
+    
+    #displayNode.SetVisibility(0)
+    
     rw = self.firstThreeDView.renderWindow()
     wti = vtk.vtkWindowToImageFilter()
     wti.SetInput(rw)
     slicer.app.processEvents()
     wti.Update()
+
+    #displayNode.SetVisibility(1)
   
     # Convert image to gray-scale
     movingExtract = vtk.vtkImageExtractComponents()
@@ -2128,7 +2143,7 @@ class BronchoscopyWidget:
     self.firstThreeDView.pitchRollYawIncrement = abs(angle)
     self.firstThreeDView.roll()
 
-    slicer.mrmlScene.RemoveNode(movingScalarVolume)
+    #slicer.mrmlScene.RemoveNode(movingScalarVolume)
     slicer.mrmlScene.RemoveNode(realScalarVolume)
 
   def startVideoStreaming(self, checked):
