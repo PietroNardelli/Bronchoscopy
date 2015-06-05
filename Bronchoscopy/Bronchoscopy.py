@@ -92,6 +92,8 @@ class BronchoscopyWidget:
 
     self.updateGUI()
 
+    self.improveCTContrast()
+
     if not parent:
       self.setup()
       self.parent.show()
@@ -149,6 +151,8 @@ class BronchoscopyWidget:
     self.layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(self.customLayoutId, customLayout)
     self.layoutManager.setLayout(self.customLayoutId)
 
+    self.alignViewers()
+
   def cleanup(self):
     pass
 
@@ -160,6 +164,41 @@ class BronchoscopyWidget:
 
     self.secondThreeDView.resetFocalPoint()
     self.secondThreeDView.lookFromViewAxis(ctk.ctkAxesWidget().Anterior)
+
+    self.improveCTContrast()
+
+  def improveCTContrast(self):
+    red_logic = slicer.app.layoutManager().sliceWidget("Red").sliceLogic()
+    red_cn = red_logic.GetSliceCompositeNode()
+    volumeID = red_cn.GetBackgroundVolumeID()
+    volume = slicer.util.getNode(volumeID)
+    displayNode = volume.GetDisplayNode()
+    displayNode.SetAutoWindowLevel(0)
+    displayNode.SetWindowLevel(1400,-500)
+
+  def alignViewers(self):
+    crosshairNode = slicer.vtkMRMLCrosshairNode()
+    crosshairNode.SetName('viewersAlignmentNode')
+    crosshairNode.NavigationOn()
+    
+    slicer.mrmlScene.AddNode(crosshairNode)
+    crosshairNodes = slicer.mrmlScene.GetNodesByName('viewersAlignmentNode')
+    crosshairNodes.UnRegister(slicer.mrmlScene)
+    crosshairNodes.InitTraversal()
+    viewersAlignmentNode = crosshairNodes.GetNextItemAsObject()
+    while viewersAlignmentNode:
+      viewersAlignmentNode.SetCrosshairMode(1)
+      viewersAlignmentNode = crosshairNodes.GetNextItemAsObject()
+
+    self.crosshairNode=slicer.util.getNode('viewersAlignmentNode')
+    self.crosshairNode.AddObserver(slicer.vtkMRMLCrosshairNode.CursorPositionModifiedEvent, self.onMouseMoved)
+    self.crosshairNode.SetCrosshairMode(5)
+    self.crosshairNode.SetCrosshairToMedium()
+
+  def onMouseMoved(self,observer,eventid):
+    ras=[0,0,0]
+    self.crosshairNode.GetCursorPositionRAS(ras)
+    self.crosshairNode.SetCrosshairRAS(ras)
 
   def setup(self):
     #
@@ -404,7 +443,7 @@ class BronchoscopyWidget:
     self.labelPointsListSelector.setToolTip( "Select points on the label closest to the ROI." )
     pathCreationFormLayout.addRow("Label(s) Points List: ", self.labelPointsListSelector)
 
-    self.createLabelsFiducialsButton = qt.QPushButton("Add New Label Points")
+    self.createLabelsFiducialsButton = qt.QPushButton("Add New Label Point(s)")
     self.createLabelsFiducialsButton.toolTip = "Add point(s) on the closest labels to the ROIs."
     self.createLabelsFiducialsButton.setFixedSize(160,35)
 
@@ -418,7 +457,7 @@ class BronchoscopyWidget:
     self.ROIsPoints = qt.QComboBox()
 
     # Button to create new path points
-    self.createNewPathPointsButton = qt.QPushButton("Add New Path Points")
+    self.createNewPathPointsButton = qt.QPushButton("Add New Path Point(s)")
     self.createNewPathPointsButton.toolTip = "Add new path point(s) to improve path creation."
     self.createNewPathPointsButton.setFixedSize(160,35)
 
@@ -760,7 +799,7 @@ class BronchoscopyWidget:
     markupsList.SetName('RegistrationPoints')
     slicer.mrmlScene.AddNode(markupsList)
     displayNode = markupsList.GetDisplayNode()
-    displayNode.SetSelectedColor((0,0,255))
+    displayNode.SetSelectedColor(0.0,0.0,1.0)
 
     self.registrationSelector.setCurrentNodeID(markupsList.GetID())
 
@@ -1198,14 +1237,13 @@ class BronchoscopyWidget:
         displayNode = AddedPathPointsList.GetDisplayNode()
         displayNode.SetGlyphScale(3)
         displayNode.SetTextScale(0)
-        displayNode.SetSelectedColor((55,255,0))
+        displayNode.SetSelectedColor(1.0,1.0,0.0)
 
         AddedPathPointsList.AddFiducial(fidPosition[0],fidPosition[1],fidPosition[2])
 
       markupLogic = slicer.modules.markups.logic()
       markupLogic.SetActiveListID(markupsList)
       self.labelPointsListSelector.setCurrentNode(markupsList)
-
 
     
   def onCreateLabelsFiducialsList(self):
@@ -1223,7 +1261,7 @@ class BronchoscopyWidget:
     fidDisplayNode = fidNode.GetDisplayNode()
     fidDisplayNode.SetGlyphScale(3)
     fidDisplayNode.SetTextScale(0)
-    fidDisplayNode.SetSelectedColor((0,255,255))
+    fidDisplayNode.SetSelectedColor(0.0,1.0,1.0)
     
     markupLogic.SetActiveListID(markupsList)
     self.labelPointsListSelector.setCurrentNode(markupsList)
@@ -1233,6 +1271,23 @@ class BronchoscopyWidget:
     selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
     interactionNode = appLogic.GetInteractionNode()
     interactionNode.SwitchToPersistentPlaceMode()
+
+    fidIndex = self.ROIsPoints.currentIndex
+    ROIsList = slicer.util.getNode('ROIFiducials')
+    fidPosition = [0,0,0]
+    ROIsList.GetNthFiducialPosition(fidIndex, fidPosition)
+
+    lm = slicer.app.layoutManager()
+    yellowWidget = lm.sliceWidget('Yellow')
+    yellowLogic = yellowWidget.sliceLogic()
+    greenWidget = lm.sliceWidget('Green')
+    greenLogic = greenWidget.sliceLogic()
+    redWidget = lm.sliceWidget('Red')
+    redLogic = redWidget.sliceLogic() 
+    
+    yellowLogic.SetSliceOffset(fidPosition[0])
+    greenLogic.SetSliceOffset(fidPosition[1])
+    redLogic.SetSliceOffset(fidPosition[2])
     
     #self.updateGUI()
 
@@ -1269,6 +1324,7 @@ class BronchoscopyWidget:
 
         if AddedPathPointsList:
           if AddedPathPointsList.GetNumberOfFiducials() > 0:
+            firstPath.GetPoint(0)
             AddedPathPointsList.AddFiducial(targetPos[0],targetPos[1],targetPos[2])
             computedPath = self.computeAddedPath(AddedPathPointsList)
             secondPath = self.createAddedPath(computedPath)
@@ -1283,11 +1339,11 @@ class BronchoscopyWidget:
         tubeFilter = vtk.vtkTubeFilter()
         if AddedPathPointsList:
           tubeFilter.SetInputData(appendFilter.GetOutput())
-          tubeFilter.SetRadius(0.2)
+          tubeFilter.SetRadius(0.15)
           tubeFilter.SetNumberOfSides(50)
         else:
           tubeFilter.SetInputData(firstPath)
-          tubeFilter.SetRadius(0.2)
+          tubeFilter.SetRadius(0.15)
           tubeFilter.SetNumberOfSides(50)          
 
         tubeFilter.Update()
@@ -1623,10 +1679,10 @@ class BronchoscopyWidget:
     #fidNode =  self.pointsListSelector.currentNode()
     fidNode.SetNthFiducialVisibility(idx,1)
 
-    self.pathInfo(pathModel)
+    self.pathInfo(pathModel, fidDisplayNode)
     self.updateGUI()
 
-  def pathInfo(self, model):
+  def pathInfo(self, model, dispNode):
     polyData = model.GetPolyData()
     numberOfPoints = polyData.GetNumberOfPoints()
     
@@ -1638,6 +1694,10 @@ class BronchoscopyWidget:
     squaredLength = vtk.vtkMath.Distance2BetweenPoints(firstPoint, lastPoint)
     length = math.sqrt(squaredLength)
     length = int(length)
+    if length == 0:
+      dispNode.SetSelectedColor(0.22,1.0,1.0)
+    else:
+      dispNode.SetSelectedColor(1.0,0.5,0.5)
     length = str(length) + ' mm'        
        
     self.pathLength.setText(length)
@@ -1782,8 +1842,9 @@ class BronchoscopyWidget:
       self.sensorTimer.start()
        
       self.layoutManager = slicer.app.layoutManager()
-      self.firstThreeDView = self.layoutManager.threeDWidget( 0 ).threeDView()
+      #self.firstThreeDView = self.layoutManager.threeDWidget( 0 ).threeDView()
       self.firstViewCornerAnnotation = self.firstThreeDView.cornerAnnotation()
+      self.secondViewCornerAnnotation = self.secondThreeDView.cornerAnnotation()
        
     else:  # When button is released...      
       self.ProbeTrackButton.setStyleSheet("background-color: rgb(255,255,255)")
@@ -1834,8 +1895,9 @@ class BronchoscopyWidget:
 
           if self.probeCalibrationTransform.GetTransformNodeID() == None:
             self.probeCalibrationTransform.SetAndObserveTransformNodeID(self.centerlineCompensationTransform.GetID())
-          
+
           self.CheckCurrentPosition(transformMatrix)
+
   
   def onResetCameraButtonPressed(self):
     cameraNodes = slicer.mrmlScene.GetNodesByName('Default Scene Camera')
@@ -1942,13 +2004,21 @@ class BronchoscopyWidget:
     
     distToTarget = 'Distance To Target: ' + length
 
-    self.firstViewCornerAnnotation.SetText(1,distToTarget) 
+    self.firstViewCornerAnnotation.SetText(1,distToTarget)
+    self.secondViewCornerAnnotation.SetText(1,distToTarget)
+    
     color = qt.QColor('yellow')
-    txtProperty = self.firstViewCornerAnnotation.GetTextProperty()
-    txtProperty.SetColor(color.redF(), color.greenF(), color.blueF())
-    txtProperty.SetBold(1)
-    #txtProperty.SetFontFamilyAsString('Courier')
-    self.firstThreeDView.forceRender()
+    firsTxtProperty = self.firstViewCornerAnnotation.GetTextProperty()
+    firsTxtProperty.SetColor(color.redF(), color.greenF(), color.blueF())
+    firsTxtProperty.SetBold(1)
+    #firsTxtProperty.SetFontFamilyAsString('Courier')
+    
+    secondTxtProperty = self.secondViewCornerAnnotation.GetTextProperty()
+    secondTxtProperty.SetColor(color.redF(), color.greenF(), color.blueF())
+    secondTxtProperty.SetBold(1)
+    #secondTxtProperty.SetFontFamilyAsString('Courier')
+    
+    self.secondThreeDView.forceRender()
 
   ###########################################################################################
   ################################## Image Registration #####################################
@@ -2063,6 +2133,7 @@ class BronchoscopyWidget:
 
   def startVideoStreaming(self, checked):
     if checked:
+      self.VideoRegistrationButton.setText("Stop Video Streaming")
       if self.videoStreamingNode == None:
         streamingNodes = slicer.mrmlScene.GetNodesByName('streamingConnector')
         if streamingNodes.GetNumberOfItems() == 0:
@@ -2079,7 +2150,7 @@ class BronchoscopyWidget:
         self.checkStreamingTimer.start()
     else:
       if self.videoStreamingNode != None:
-        self.VideoRegistrationButton.setText("Stop Video Streaming")
+        self.VideoRegistrationButton.setText("Start Video Streaming")
         self.videoStreamingNode.Stop()      
 
   def showVideoStreaming(self):
