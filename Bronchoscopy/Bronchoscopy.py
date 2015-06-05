@@ -2037,11 +2037,12 @@ class BronchoscopyWidget:
     videoNode = slicer.util.getNode('Image_Reference')
 
     # Crop image to remove the info part on the left side
-    '''VOIExtract = vtk.vtkExtractVOI()
+    VOIExtract = vtk.vtkExtractVOI()
     VOIExtract.SetInputConnection(videoNode.GetImageDataConnection())
     VOIExtract.SetVOI(180,571,58,430,0,0)
     VOIExtract.Update()
-    w = vtk.vtkPNGWriter()
+    
+    '''w = vtk.vtkPNGWriter()
     w.SetInputConnection(VOIExtract.GetOutputPort())
     w.SetFileName('C:/Users/Lab/Desktop/text.png')
     w.Write()'''
@@ -2049,15 +2050,16 @@ class BronchoscopyWidget:
     # Flip image about x
     realImageFlipX = vtk.vtkImageFlip()
     realImageFlipX.SetFilteredAxis(0)
-    #realImageFlipX.SetInputConnection(VOIExtract.GetOutputPort())
-    realImageFlipX.SetInputConnection(videoNode.GetImageDataConnection())
+    realImageFlipX.SetInputConnection(VOIExtract.GetOutputPort())
+    #realImageFlipX.SetInputConnection(videoNode.GetImageDataConnection())
 
     # Flip image about y
-    realImageFlipY = vtk.vtkImageFlip()
-    realImageFlipY.SetFilteredAxis(1)
-    realImageFlipY.SetInputConnection(realImageFlipX.GetOutputPort())    
+    #realImageFlipY = vtk.vtkImageFlip()
+    #realImageFlipY.SetFilteredAxis(1)
+    #realImageFlipY.SetInputConnection(realImageFlipX.GetOutputPort())    
 
-    realImageFlipY.Update()
+    #realImageFlipY.Update()
+    realImageFlipX.Update()
     
     # Convert image to gray-scale 
     realExtract = vtk.vtkImageExtractComponents()
@@ -2065,12 +2067,12 @@ class BronchoscopyWidget:
     realLuminance = vtk.vtkImageLuminance()
     
     if vtk.VTK_MAJOR_VERSION <= 5:
-      realExtract.SetInput(realImageFlipY.GetOutput())
+      realExtract.SetInput(realImageFlipX.GetOutput())
       realLuminance.SetInput(realExtract.GetOutput())
       realLuminance.GetOutput().Update() 
     else:
       #realExtract.SetInputConnection(realImageFlip.GetOutputPort())
-      realExtract.SetInputConnection(realImageFlipY.GetOutputPort())
+      realExtract.SetInputConnection(realImageFlipX.GetOutputPort())
       realLuminance.SetInputConnection(realExtract.GetOutputPort())
       realLuminance.Update()
 
@@ -2112,7 +2114,7 @@ class BronchoscopyWidget:
       movingLuminance.Update()
 
     # Flip image about x
-    movingImageFlip = vtk.vtk.vtkImageFlip()
+    movingImageFlip = vtk.vtkImageFlip()
     movingImageFlip.SetFilteredAxis(0)
     movingImageFlip.SetInputData(movingLuminance.GetOutput())
     movingImageFlip.Update()
@@ -2143,7 +2145,7 @@ class BronchoscopyWidget:
     self.firstThreeDView.pitchRollYawIncrement = abs(angle)
     self.firstThreeDView.roll()
 
-    #slicer.mrmlScene.RemoveNode(movingScalarVolume)
+    slicer.mrmlScene.RemoveNode(movingScalarVolume)
     slicer.mrmlScene.RemoveNode(realScalarVolume)
 
   def startVideoStreaming(self, checked):
