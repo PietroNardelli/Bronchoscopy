@@ -149,8 +149,6 @@ class BronchoscopyWidget:
     self.layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(self.customLayoutId, customLayout)
     self.layoutManager.setLayout(self.customLayoutId)
 
-    self.alignViewers()
-
   def cleanup(self):
     pass
 
@@ -174,30 +172,6 @@ class BronchoscopyWidget:
     displayNode = volume.GetDisplayNode()
     displayNode.SetAutoWindowLevel(0)
     displayNode.SetWindowLevel(1400,-500)
-
-  def alignViewers(self):
-    crosshairNode = slicer.vtkMRMLCrosshairNode()
-    crosshairNode.SetName('viewersAlignmentNode')
-    crosshairNode.NavigationOn()
-    
-    slicer.mrmlScene.AddNode(crosshairNode)
-    crosshairNodes = slicer.mrmlScene.GetNodesByName('viewersAlignmentNode')
-    crosshairNodes.UnRegister(slicer.mrmlScene)
-    crosshairNodes.InitTraversal()
-    viewersAlignmentNode = crosshairNodes.GetNextItemAsObject()
-    while viewersAlignmentNode:
-      viewersAlignmentNode.SetCrosshairMode(1)
-      viewersAlignmentNode = crosshairNodes.GetNextItemAsObject()
-
-    self.crosshairNode=slicer.util.getNode('viewersAlignmentNode')
-    self.crosshairNode.AddObserver(slicer.vtkMRMLCrosshairNode.CursorPositionModifiedEvent, self.onMouseMoved)
-    self.crosshairNode.SetCrosshairMode(5)
-    self.crosshairNode.SetCrosshairToMedium()
-
-  def onMouseMoved(self,observer,eventid):
-    ras=[0,0,0]
-    self.crosshairNode.GetCursorPositionRAS(ras)
-    self.crosshairNode.SetCrosshairRAS(ras)
 
   def setup(self):
     #
@@ -1129,6 +1103,9 @@ class BronchoscopyWidget:
 #######################################################################################################
     
   def onCreateROIFiducialsList(self):
+    self.alignViewers()
+    self.fitSlicesToBackground()
+    
     ROIFiducialList = slicer.util.getNode('ROIFiducials')
     markupLogic = slicer.modules.markups.logic()
 
@@ -1155,6 +1132,43 @@ class BronchoscopyWidget:
 
     #self.updateGUI()
     self.addFiducialObservers()
+
+  def alignViewers(self):
+    crosshairNode = slicer.vtkMRMLCrosshairNode()
+    crosshairNode.SetName('viewersAlignmentNode')
+    crosshairNode.NavigationOn()
+    
+    slicer.mrmlScene.AddNode(crosshairNode)
+    crosshairNodes = slicer.mrmlScene.GetNodesByName('viewersAlignmentNode')
+    crosshairNodes.UnRegister(slicer.mrmlScene)
+    crosshairNodes.InitTraversal()
+    viewersAlignmentNode = crosshairNodes.GetNextItemAsObject()
+    while viewersAlignmentNode:
+      viewersAlignmentNode.SetCrosshairMode(1)
+      viewersAlignmentNode = crosshairNodes.GetNextItemAsObject()
+
+    self.crosshairNode=slicer.util.getNode('viewersAlignmentNode')
+    self.crosshairNode.AddObserver(slicer.vtkMRMLCrosshairNode.CursorPositionModifiedEvent, self.onMouseMoved)
+    self.crosshairNode.SetCrosshairMode(5)
+    self.crosshairNode.SetCrosshairToMedium()
+
+  def onMouseMoved(self,observer,eventid):
+    ras=[0,0,0]
+    self.crosshairNode.GetCursorPositionRAS(ras)
+    self.crosshairNode.SetCrosshairRAS(ras)
+
+  def fitSlicesToBackground(self):
+    lm = slicer.app.layoutManager()
+    redWidget = lm.sliceWidget('Red')
+    redLogic = redWidget.sliceLogic()
+    yellowWidget = lm.sliceWidget('Yellow')
+    yellowLogic = yellowWidget.sliceLogic()
+    greenWidget = lm.sliceWidget('Green')
+    greenLogic = greenWidget.sliceLogic()
+
+    redLogic.FitSliceToBackground(1,1)
+    yellowLogic.FitSliceToBackground(1,1)
+    greenLogic.FitSliceToBackground(1,1)
 
   def addFiducialObservers(self):
     '''Add observers to all fiducialLists in scene so we will know when new markups are added'''
@@ -1246,6 +1260,9 @@ class BronchoscopyWidget:
 
     
   def onCreateLabelsFiducialsList(self):
+    
+    self.fitSlicesToBackground()
+
     LabelPointFiducialList = slicer.util.getNode('LabelsPoints')
     markupLogic = slicer.modules.markups.logic()
 
@@ -1291,6 +1308,8 @@ class BronchoscopyWidget:
     #self.updateGUI()
 
   def startAddingNewPathPoints(self):
+
+    self.fitSlicesToBackground()
     
     self.addNewPathPoints = True
     appLogic = slicer.app.applicationLogic()
@@ -1398,11 +1417,18 @@ class BronchoscopyWidget:
    
     # Update GUI
     self.updateGUI()
+    
     appLogic = slicer.app.applicationLogic()
     selectionNode = appLogic.GetSelectionNode()
     selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
     interactionNode = appLogic.GetInteractionNode()
     interactionNode.Reset()
+
+    self.crosshairNode=slicer.util.getNode('viewersAlignmentNode')
+    self.crosshairNode.SetCrosshairMode(0)
+    self.crosshairNode.NavigationOff()
+
+    self.fitSlicesToBackground()
 
   def pathComputation(self, inputModel, targetPosition):
     """
@@ -1482,11 +1508,14 @@ class BronchoscopyWidget:
     else:
       smoothfactor = 1
       iterations = 10'''
+
+    smoothfactor = 1
+    iterations = 10
       
     centerlineSmoothing = vmtkLogic.vtkSlicerPathExtractionClassesCenterlineSmoothingLogic()
     centerlineSmoothing.SetInputData(pathModel)
-    centerlineSmoothing.SetNumberOfSmoothingIterations(10)
-    centerlineSmoothing.SetSmoothingFactor(1)
+    centerlineSmoothing.SetNumberOfSmoothingIterations(iterations)
+    centerlineSmoothing.SetSmoothingFactor(smoothfactor)
     centerlineSmoothing.Update()
     
     self.createdPath = centerlineSmoothing.GetOutput()
@@ -1870,8 +1899,8 @@ class BronchoscopyWidget:
 
       self.cameraForNavigation.SetFocalPoint(lastFPBeforeStoppingTracking[0],lastFPBeforeStoppingTracking[1],lastFPBeforeStoppingTracking[2])
       self.cameraForNavigation.SetPosition(lastPosBeforeStoppingTracking[0],lastPosBeforeStoppingTracking[1],lastPosBeforeStoppingTracking[2])
+      camera = self.cameraForNavigation.GetCamera()  
       self.cameraForNavigation.SetViewUp(lastViewUp)
-      camera = self.cameraForNavigation.GetCamera()
       camera.SetClippingRange(0.7081381565016212, 708.1381565016211) # to be checked
 
       if self.points.GetNumberOfPoints() > 0:
@@ -1896,7 +1925,6 @@ class BronchoscopyWidget:
             self.probeCalibrationTransform.SetAndObserveTransformNodeID(self.centerlineCompensationTransform.GetID())
 
           self.CheckCurrentPosition(transformMatrix)
-
   
   def onResetCameraButtonPressed(self):
     cameraNodes = slicer.mrmlScene.GetNodesByName('Default Scene Camera')
@@ -1917,9 +1945,13 @@ class BronchoscopyWidget:
           pos[1] = transformMatrix.GetElement(1,3)
           pos[2] = transformMatrix.GetElement(2,3)
           self.cameraForNavigation.SetPosition(pos[0],pos[1],pos[2])
-          fp = [0,0,0]
-          self.cameraForNavigation.GetFocalPoint(fp)
-          self.cameraForNavigation.SetFocalPoint(fp[0],fp[1],fp[2])
+          camera = self.cameraForNavigation.GetCamera()
+          vpn = camera.GetViewPlaneNormal()
+          pos = numpy.asarray(pos)
+          vpn=numpy.asarray(vpn)
+          FP = pos-4*vpn
+          #self.cameraForNavigation.GetFocalPoint(FP)
+          self.cameraForNavigation.SetFocalPoint(FP[0],FP[1],FP[2])
 
       self.cameraForNavigation.SetViewAngle(55)
       
@@ -1998,11 +2030,20 @@ class BronchoscopyWidget:
     squaredDistance = vtk.vtkMath.Distance2BetweenPoints(firstPoint, secondPoint)
     length = math.sqrt(squaredDistance)
     length = int(length)
-    length = str(length) + ' mm'        
-       
-    self.distanceToTarget.setText(length)
     
-    distToTarget = 'Distance To Target: ' + length
+    # Change color of the fiducial when close to the ROI
+    ROIFiducialList = slicer.util.getNode('ROIFiducials')
+    displayNode = ROIFiducialList.GetDisplayNode()
+    if length <= 3:
+      displayNode.SetSelectedColor(0.4, 1.0, 1.0)
+    else:
+      displayNode.SetSelectedColor(1.0,0.0,0.0)      
+    
+    string_length = str(length) + ' mm'        
+       
+    self.distanceToTarget.setText(string_length)
+    
+    distToTarget = 'Distance To Target: ' + string_length
 
     self.firstViewCornerAnnotation.SetText(1,distToTarget)
     self.secondViewCornerAnnotation.SetText(1,distToTarget)
@@ -2031,7 +2072,6 @@ class BronchoscopyWidget:
       self.registrationTimer.stop()
       self.ImageRegistrationButton.text = "Start Image Registration"
 
-
   def registerImage(self):
     # Read the real image
     videoNode = slicer.util.getNode('Image_Reference')
@@ -2053,12 +2093,6 @@ class BronchoscopyWidget:
     realImageFlipX.SetInputConnection(VOIExtract.GetOutputPort())
     #realImageFlipX.SetInputConnection(videoNode.GetImageDataConnection())
 
-    # Flip image about y
-    #realImageFlipY = vtk.vtkImageFlip()
-    #realImageFlipY.SetFilteredAxis(1)
-    #realImageFlipY.SetInputConnection(realImageFlipX.GetOutputPort())    
-
-    #realImageFlipY.Update()
     realImageFlipX.Update()
     
     # Convert image to gray-scale 
@@ -2071,7 +2105,6 @@ class BronchoscopyWidget:
       realLuminance.SetInput(realExtract.GetOutput())
       realLuminance.GetOutput().Update() 
     else:
-      #realExtract.SetInputConnection(realImageFlip.GetOutputPort())
       realExtract.SetInputConnection(realImageFlipX.GetOutputPort())
       realLuminance.SetInputConnection(realExtract.GetOutputPort())
       realLuminance.Update()
@@ -2086,20 +2119,19 @@ class BronchoscopyWidget:
 
     slicer.mrmlScene.AddNode(realScalarVolume)
 
-    # Grab 3D view screenshot
-    #pathModel = self.pathModelSelector.currentNode()
-    #displayNode = pathModel.GetDisplayNode()
-    
-    #displayNode.SetVisibility(0)
+    # Grab 3D view
+    pathModel = self.pathModelSelector.currentNode()
+    displayNode = pathModel.GetDisplayNode()    
     
     rw = self.firstThreeDView.renderWindow()
     wti = vtk.vtkWindowToImageFilter()
     wti.SetInput(rw)
+    displayNode.SetVisibility(0)
     slicer.app.processEvents()
     wti.Update()
-
-    #displayNode.SetVisibility(1)
-  
+    displayNode.SetVisibility(1)
+    slicer.app.processEvents()
+    
     # Convert image to gray-scale
     movingExtract = vtk.vtkImageExtractComponents()
     movingExtract.SetComponents(0,1,2)
