@@ -367,10 +367,10 @@ class BronchoscopyWidget:
     boxLayout.addWidget(self.CreateFiducialListButton,0,4)
 
     ####################################################################################
-    ######################  Create Path Towards An ROI Section  ########################
+    ############  Create Path Towards An ROI Section (Procedure Planning)  #############
     ####################################################################################
     self.pathCreationCollapsibleButton = ctk.ctkCollapsibleButton()
-    self.pathCreationCollapsibleButton.text = "Path Creation"
+    self.pathCreationCollapsibleButton.text = "Procedure Planning"
     self.pathCreationCollapsibleButton.setChecked(True)
     self.pathCreationCollapsibleButton.enabled = True
     self.layout.addWidget(self.pathCreationCollapsibleButton)
@@ -389,6 +389,7 @@ class BronchoscopyWidget:
     self.pointsListSelector.showChildNodeTypes = False
     self.pointsListSelector.setMRMLScene( slicer.mrmlScene )
     self.pointsListSelector.setToolTip( "Select points indicating ROIs to reach." )
+    self.pointsListSelector.setFixedWidth(180)
     pathCreationFormLayout.addRow("ROI(s) Points List: ", self.pointsListSelector)
 
     self.createROIFiducialsButton = qt.QPushButton("Add New ROI Point(s)")
@@ -414,6 +415,7 @@ class BronchoscopyWidget:
     self.labelPointsListSelector.showChildNodeTypes = False
     self.labelPointsListSelector.setMRMLScene( slicer.mrmlScene )
     self.labelPointsListSelector.setToolTip( "Select points on the label closest to the ROI." )
+    self.labelPointsListSelector.setFixedWidth(180)
     pathCreationFormLayout.addRow("Label(s) Points List: ", self.labelPointsListSelector)
 
     self.createLabelsFiducialsButton = qt.QPushButton("Add New Label Point(s)")
@@ -428,18 +430,74 @@ class BronchoscopyWidget:
 
     # Combobox listing all the ROIs points
     self.ROIsPoints = qt.QComboBox()
+    self.ROIsPoints.setFixedWidth(180)
 
     # Button to create new path points
     self.createNewPathPointsButton = qt.QPushButton("Add New Path Point(s)")
     self.createNewPathPointsButton.toolTip = "Add new path point(s) to improve path creation."
     self.createNewPathPointsButton.setFixedSize(160,35)
 
-    ROIPoinntSelectionBox = qt.QHBoxLayout()
-    pathCreationFormLayout.addRow(ROIPoinntSelectionBox)
+    ROIPointSelectionBox = qt.QHBoxLayout()
+    #pathCreationFormLayout.addRow("New Path Points List: ",)
+    pathCreationFormLayout.addRow(ROIPointSelectionBox)
 
-    ROIPoinntSelectionBox.addWidget(self.ROIsPoints)
-    ROIPoinntSelectionBox.addWidget(self.createNewPathPointsButton)
+    ROIPointSelectionBox.addWidget(self.ROIsPoints)
+    ROIPointSelectionBox.addWidget(self.createNewPathPointsButton)
     
+    # 
+    # Buttons to enlarge views upon request
+    #
+    layoutGroupBox = qt.QFrame()
+    layoutGroupBox.setLayout(qt.QVBoxLayout())
+    layoutGroupBox.setFixedHeight(86)
+    pathCreationFormLayout.addRow(layoutGroupBox) 
+
+    buttonGroupBox = qt.QFrame()
+    buttonGroupBox.setLayout(qt.QHBoxLayout())
+    layoutGroupBox.layout().addWidget(buttonGroupBox)
+
+    #
+    # Default Layout Button
+    #
+    self.defaultButton = qt.QPushButton("Def")
+    self.defaultButton.toolTip = "Default layout button."
+    self.defaultButton.enabled = True
+    self.defaultButton.setFixedSize(40,40)
+    buttonGroupBox.layout().addWidget(self.defaultButton)
+   
+    #
+    # Red Slice Button
+    #
+    self.redViewButton = qt.QPushButton()
+    self.redViewButton.toolTip = "Red slice only."
+    self.redViewButton.enabled = True
+    self.redViewButton.setFixedSize(40,40)
+    redIcon = qt.QIcon(":/Icons/LayoutOneUpRedSliceView.png")
+    self.redViewButton.setIcon(redIcon)
+    buttonGroupBox.layout().addWidget(self.redViewButton)
+
+    #
+    # Yellow Slice Button
+    #
+    self.yellowViewButton = qt.QPushButton()
+    self.yellowViewButton.toolTip = "Yellow slice only."
+    self.yellowViewButton.enabled = True
+    self.yellowViewButton.setFixedSize(40,40)
+    yellowIcon = qt.QIcon(":/Icons/LayoutOneUpYellowSliceView.png")
+    self.yellowViewButton.setIcon(yellowIcon)
+    buttonGroupBox.layout().addWidget(self.yellowViewButton)
+    
+    #
+    # Green Slice Button
+    #
+    self.greenViewButton = qt.QPushButton()
+    self.greenViewButton.toolTip = "Yellow slice only."
+    self.greenViewButton.enabled = True
+    self.greenViewButton.setFixedSize(40,40)   
+    greenIcon = qt.QIcon(":/Icons/LayoutOneUpGreenSliceView.png")
+    self.greenViewButton.setIcon(greenIcon) 
+    buttonGroupBox.layout().addWidget(self.greenViewButton)
+
     ###################################################################################
     #############################  Path Creation Button  ############################## 
     ###################################################################################
@@ -598,6 +656,12 @@ class BronchoscopyWidget:
     self.createROIFiducialsButton.connect('clicked(bool)', self.onCreateROIFiducialsList)
     self.createLabelsFiducialsButton.connect('clicked(bool)', self.onCreateLabelsFiducialsList)
     self.ROIsPoints.connect('currentIndexChanged(int)', self.showSelectedROI)
+
+    self.defaultButton.connect('clicked()', self.onDefaultLayoutButton)
+    self.redViewButton.connect('clicked()', self.onRedViewButton)
+    self.yellowViewButton.connect('clicked()', self.onYellowViewButton)
+    self.greenViewButton.connect('clicked()', self.onGreenViewButton)
+
     self.createNewPathPointsButton.connect('clicked(bool)', self.startAddingNewPathPoints)
     
     self.PathCreationButton.connect('clicked(bool)', self.onPathCreationButton)
@@ -1257,7 +1321,6 @@ class BronchoscopyWidget:
       markupLogic = slicer.modules.markups.logic()
       markupLogic.SetActiveListID(markupsList)
       self.labelPointsListSelector.setCurrentNode(markupsList)
-
     
   def onCreateLabelsFiducialsList(self):
     
@@ -1321,6 +1384,73 @@ class BronchoscopyWidget:
     self.showSelectedROI()
     
     #self.updateGUI()
+  def onDefaultLayoutButton(self):
+    self.fitSlicesToBackground()
+    self.layoutManager.setLayout(self.customLayoutId)
+
+    fidIndex = self.ROIsPoints.currentIndex
+    ROIsList = slicer.util.getNode('ROIFiducials')
+    if ROIsList:
+      fidPosition = [0,0,0]
+      ROIsList.GetNthFiducialPosition(fidIndex, fidPosition)
+
+      yellowWidget = self.layoutManager.sliceWidget('Yellow')
+      yellowLogic = yellowWidget.sliceLogic()
+      greenWidget = self.layoutManager.sliceWidget('Green')
+      greenLogic = greenWidget.sliceLogic()
+      redWidget = self.layoutManager.sliceWidget('Red')
+      redLogic = redWidget.sliceLogic() 
+
+  def onRedViewButton(self):
+    self.fitSlicesToBackground()
+    self.layoutManager.setLayout(6)
+
+    fidIndex = self.ROIsPoints.currentIndex
+    ROIsList = slicer.util.getNode('ROIFiducials')
+    if ROIsList:
+      fidPosition = [0,0,0]
+      ROIsList.GetNthFiducialPosition(fidIndex, fidPosition)
+
+      yellowWidget = self.layoutManager.sliceWidget('Yellow')
+      yellowLogic = yellowWidget.sliceLogic()
+      greenWidget = self.layoutManager.sliceWidget('Green')
+      greenLogic = greenWidget.sliceLogic()
+      redWidget = self.layoutManager.sliceWidget('Red')
+      redLogic = redWidget.sliceLogic() 
+ 
+  def onYellowViewButton(self):
+    self.fitSlicesToBackground()
+    self.layoutManager.setLayout(7)
+
+    fidIndex = self.ROIsPoints.currentIndex
+    ROIsList = slicer.util.getNode('ROIFiducials')
+    if ROIsList:
+      fidPosition = [0,0,0]
+      ROIsList.GetNthFiducialPosition(fidIndex, fidPosition)
+
+      yellowWidget = self.layoutManager.sliceWidget('Yellow')
+      yellowLogic = yellowWidget.sliceLogic()
+      greenWidget = self.layoutManager.sliceWidget('Green')
+      greenLogic = greenWidget.sliceLogic()
+      redWidget = self.layoutManager.sliceWidget('Red')
+      redLogic = redWidget.sliceLogic() 
+
+  def onGreenViewButton(self):
+    self.fitSlicesToBackground()
+    self.layoutManager.setLayout(8)
+
+    fidIndex = self.ROIsPoints.currentIndex
+    ROIsList = slicer.util.getNode('ROIFiducials')
+    if ROIsList:
+      fidPosition = [0,0,0]
+      ROIsList.GetNthFiducialPosition(fidIndex, fidPosition)
+
+      yellowWidget = self.layoutManager.sliceWidget('Yellow')
+      yellowLogic = yellowWidget.sliceLogic()
+      greenWidget = self.layoutManager.sliceWidget('Green')
+      greenLogic = greenWidget.sliceLogic()
+      redWidget = self.layoutManager.sliceWidget('Red')
+      redLogic = redWidget.sliceLogic() 
 
   def onPathCreationButton(self):
     fiducials = slicer.util.getNode('LabelsPoints')
