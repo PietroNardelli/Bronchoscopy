@@ -1519,13 +1519,6 @@ class BronchoscopyWidget:
         slicer.mrmlScene.AddNode(model)
 
         self.pathModelNamesList.append(model.GetName()) # Save names to delete models before creating the new ones.
-
-        ########################################### Merge Centerline Points with Path Points ###############################################
-        if self.points.GetNumberOfPoints() > 0:
-          path = tubeFilter.GetOutput()
-          pathPoints = path.GetPoints()
-          for j in xrange(pathPoints.GetNumberOfPoints()):
-            self.points.InsertNextPoint(pathPoints.GetPoint(j))
       
       self.pathCreated = 1
       
@@ -1830,6 +1823,30 @@ class BronchoscopyWidget:
     displayNode = pathModel.GetDisplayNode()
     displayNode.SetVisibility(1)
 
+    # Merge Centerline Points with Path Points 
+    if self.points.GetNumberOfPoints() > 0:
+      print self.points.GetNumberOfPoints()
+      pathPolydata = pathModel.GetPolyData()
+      pathPoints = pathPolydata.GetPoints()
+      for j in xrange(pathPoints.GetNumberOfPoints()):
+        self.points.InsertNextPoint(pathPoints.GetPoint(j))
+      print self.points.GetNumberOfPoints()
+
+    ###### Create a list of points from the vtkPoints object ############
+    if self.points.GetNumberOfPoints()>0:
+
+      if self.pointsList != []:
+        self.pointsList = self.pointsList.tolist()
+
+      for i in xrange(self.points.GetNumberOfPoints()):
+        point = self.points.GetPoint(i)
+        p = [point[0],point[1],point[2]]
+        self.pointsList.append(p)
+
+      # Avoid repetition of the same point twice
+      self.pointsList = numpy.array([list(x) for x in set(tuple(x) for x in self.pointsList)])
+      print len(self.pointsList)
+
     # Display fiducial corresponding to the selected path
     name = pathModel.GetName()
     idx = self.pathModelNamesList.index(name)
@@ -1837,7 +1854,6 @@ class BronchoscopyWidget:
     fidNode.SetNthFiducialVisibility(idx,1)
 
     self.pathInfo(pathModel, fidDisplayNode)
-    self.updateGUI()
 
   def pathInfo(self, model, dispNode):
     polyData = model.GetPolyData()
@@ -1983,18 +1999,6 @@ class BronchoscopyWidget:
       self.redLogic = redWidget.sliceLogic() 
       greenWidget = lm.sliceWidget('Green')
       self.greenLogic = greenWidget.sliceLogic()
-
-      ###### Create a list of points from the vtkPoints object ############
-      fiducialPos = [0,0,0]
-      if self.points.GetNumberOfPoints()>0:
-        for i in xrange(self.points.GetNumberOfPoints()):
-          point = self.points.GetPoint(i)
-          p = [point[0],point[1],point[2]]
-          self.pointsList.append(p)
-
-        # Avoid repetition of the same point twice
-        self.pointsList = numpy.array([list(x) for x in set(tuple(x) for x in self.pointsList)])
-        self.pointsList.tolist()
  
       self.sensorTimer.start()
        
