@@ -64,16 +64,13 @@ class BronchoscopyWidget:
     self.checkStreamingTimer.setInterval(5)
     self.checkStreamingTimer.connect('timeout()', self.showVideoStreaming)
 
-    self.points = vtk.vtkPoints()
-    self.pointsList = []
+    self.centerlinePointsList = []
     self.fiducialNode = None
 
     self.pathCreated = 0
 
     self.pathModelNamesList = []
-
-    self.centerlinePoints = vtk.vtkPoints()
-    
+   
     self.probeCalibrationTransform = None
     self.centerlineCompensationTransform = None
     self.cameraForNavigation = None
@@ -342,7 +339,7 @@ class BronchoscopyWidget:
     self.CreateFiducialListButton.toolTip = "Create a list of fiducial points starting from the extracted cenetrline bof the 3D model."
     self.CreateFiducialListButton.setFixedSize(240,25)
 
-    if self.points.GetNumberOfPoints() > 0:
+    if self.centerlinePointsList != []:
       self.CreateFiducialListButton.enabled = True
     else:
       self.CreateFiducialListButton.enabled = False
@@ -506,7 +503,7 @@ class BronchoscopyWidget:
     self.PathCreationButton.toolTip = "Run the algorithm to create the path between the specified points."
     self.PathCreationButton.setFixedSize(300,50)
 
-    if self.inputSelector.currentNode() and self.pointsListSelector.currentNode() and self.points.GetNumberOfPoints()>0:
+    if self.inputSelector.currentNode() and self.pointsListSelector.currentNode() and self.centerlinePointsList != []:
         self.PathCreationButton.enabled = True
         self.PathCreationButton.setStyleSheet("background-color: rgb(255,246,142)")
     else:
@@ -584,7 +581,7 @@ class BronchoscopyWidget:
     trackerFormLayout.addWidget(self.ResetCameraButton, 0, 4)
 
     # Enable ProbeTracKButton
-    if self.fiducialListSelector.currentNode() or self.points.GetNumberOfPoints()>0:
+    if self.fiducialListSelector.currentNode() or self.centerlinePointsList != []:
         self.ProbeTrackButton.enabled = True
     else:
         self.ProbeTrackButton.enabled = False
@@ -716,7 +713,7 @@ class BronchoscopyWidget:
       self.ExtractCenterlineButton.enabled = True
       self.ExtractCenterlineButton.setStyleSheet("background-color: rgb(175,255,253)")
    
-      if self.fiducialListSelector.currentNode() or self.points.GetNumberOfPoints()>0:
+      if self.fiducialListSelector.currentNode() or self.centerlinePointsList != []:
         self.ProbeTrackButton.enabled = True
       else:
         self.ProbeTrackButton.enabled = False
@@ -731,14 +728,14 @@ class BronchoscopyWidget:
       self.ResetCameraButton.enabled = False
       #self.ImageRegistrationButton.enabled = False
 
-    if self.inputSelector.currentNode() and self.pointsListSelector.currentNode() and self.points.GetNumberOfPoints()>0:
+    if self.inputSelector.currentNode() and self.pointsListSelector.currentNode() and self.centerlinePointsList != []:
        self.PathCreationButton.enabled = True
        self.PathCreationButton.setStyleSheet("background-color: rgb(255,246,142)")
     else:
        self.PathCreationButton.enabled = False
        self.PathCreationButton.setStyleSheet("background-color: rgb(255,255,255)")
 
-    if self.points.GetNumberOfPoints() > 0:
+    if self.centerlinePointsList != []:
       self.CreateFiducialListButton.enabled = True
 
   def disableButtonsAndSelectors(self):
@@ -897,23 +894,8 @@ class BronchoscopyWidget:
     self.enableSelectors()
     self.onSelect()
 
-    if self.points.GetNumberOfPoints() > 0:
+    if self.centerlinePointsList != []:
       self.CreateFiducialListButton.enabled = True
-  
-    '''if self.fiducialNode:
-      FList = slicer.mrmlScene.GetNodesByName('F')
-      AirwayFiducialList = slicer.mrmlScene.GetNodesByName('AirwayFiducial')
-      PathFiducialList = slicer.mrmlScene.GetNodesByName('PathFiducial')
-      markupLogic = slicer.modules.markups.logic()
-
-      if FList.GetNumberOfItems() > 0:  
-        markupsList = FList.GetItemAsObject(0)
-      elif AirwayFiducialList.GetNumberOfItems() > 0:
-        markupsList = AirwayFiducialList.GetItemAsObject(0)
-      elif PathFiducialList.GetNumberOfItems() > 0:
-        markupsList = PathFiducialList.GetItemAsObject(0)
-      
-      markupLogic.SetActiveListID(markupsList)'''
 
     # Update GUI
     self.updateGUI()
@@ -961,11 +943,6 @@ class BronchoscopyWidget:
       displayNode = self.centerlineModel.GetDisplayNode()
       displayNode.SetVisibility(0)
 
-      # create fiducial list
-      #self.fiducialNode = slicer.vtkMRMLMarkupsFiducialNode()
-      #self.fiducialNode.SetName('CenterlineFiducials')
-      #slicer.mrmlScene.AddNode(self.fiducialNode)
-
       centerlinePolydata = self.centerlineModel.GetPolyData()
 
       iterations = 3
@@ -979,9 +956,8 @@ class BronchoscopyWidget:
       for i in xrange(self.fiducialNode.GetNumberOfFiducials()):
         point = [0,0,0]
         self.fiducialNode.GetNthFiducialPosition(i,point)
-        self.points.InsertNextPoint(point)
+        self.centerlinePointsList.append(point)
 
-    self.centerlinePoints.DeepCopy(self.points)
     slicer.mrmlScene.RemoveNode(self.fiducialListSelector.currentNode())
 
     return True
@@ -1136,10 +1112,9 @@ class BronchoscopyWidget:
     self.disableButtonsAndSelectors()
 
     fiducialList = []
-    point = [0,0,0]
 
-    for n in xrange(self.points.GetNumberOfPoints()):
-      self.points.GetPoint(n,point)
+    for n in xrange(len(self.centerlinePointsList)):
+      point = self.centerlinePointsList[n]
       ID =  'vtkMRMLMarkupsFiducialNode_' + str(n)
       associatedNodeID = 'CenterlineFiducials-' + str(n+1)
       line = [ID,point[0],point[1],point[2],0,0,0,1,1,1,0,associatedNodeID,'','']
@@ -1459,7 +1434,7 @@ class BronchoscopyWidget:
       self.disableButtonsAndSelectors()
 
       # Create Centerline Path   
-      if self.points.GetNumberOfPoints() > 0:
+      if self.centerlinePointsList != []:
         self.CreateFiducialListButton.enabled = True
       pos = [0,0,0]
       targetPos = [0,0,0]
@@ -1558,20 +1533,19 @@ class BronchoscopyWidget:
     """
     import vtkSlicerPathExtractionClassesModuleLogic as vmtkLogic
 
-    '''if len(self.pathModelNamesList) > 0:
-      self.points = self.centerlinePoints
+    if len(self.pathModelNamesList) > 0:
       for n in xrange(len(self.pathModelNamesList)):
         name = self.pathModelNamesList[n]
         model = slicer.util.getNode(name)
         slicer.mrmlScene.RemoveNode(model)
-      self.pathModelNamesList = []'''
+      self.pathModelNamesList = []
         
     inputPolyData = inputModel.GetPolyData()
 
     sourceId = vtk.vtkIdList()
     sourceId.SetNumberOfIds(1)
 
-    sourcePosition = self.points.GetPoint(0)
+    sourcePosition = self.centerlinePointsList[0]
 
     source = inputPolyData.FindPoint(sourcePosition)
 
@@ -1824,28 +1798,26 @@ class BronchoscopyWidget:
     displayNode.SetVisibility(1)
 
     # Merge Centerline Points with Path Points 
-    if self.points.GetNumberOfPoints() > 0:
-      print self.points.GetNumberOfPoints()
+    if self.centerlinePointsList != []:
+      print len(self.centerlinePointsList)
       pathPolydata = pathModel.GetPolyData()
       pathPoints = pathPolydata.GetPoints()
       for j in xrange(pathPoints.GetNumberOfPoints()):
-        self.points.InsertNextPoint(pathPoints.GetPoint(j))
-      print self.points.GetNumberOfPoints()
+        self.centerlinePointsList.append(pathPoints.GetPoint(j))
+      print len(self.centerlinePointsList)
 
     ###### Create a list of points from the vtkPoints object ############
-    if self.points.GetNumberOfPoints()>0:
+    if self.centerlinePointsList != []:
 
-      if self.pointsList != []:
-        self.pointsList = self.pointsList.tolist()
-
-      for i in xrange(self.points.GetNumberOfPoints()):
-        point = self.points.GetPoint(i)
+      for i in xrange(len(self.centerlinePointsList)):
+        point = self.centerlinePointsList[i]
         p = [point[0],point[1],point[2]]
-        self.pointsList.append(p)
+        self.centerlinePointsList.append(p)
 
       # Avoid repetition of the same point twice
-      self.pointsList = numpy.array([list(x) for x in set(tuple(x) for x in self.pointsList)])
-      print len(self.pointsList)
+      self.centerlinePointsList = numpy.array([list(x) for x in set(tuple(x) for x in self.centerlinePointsList)])
+      print len(self.centerlinePointsList)
+      self.centerlinePointsList = self.centerlinePointsList.tolist()
 
     # Display fiducial corresponding to the selected path
     name = pathModel.GetName()
@@ -1896,11 +1868,6 @@ class BronchoscopyWidget:
     if checked:
       self.updateGUI()
       self.ProbeTrackButton.setStyleSheet("background-color: rgb(255,156,126)")
-
-      #if self.fiducialListSelector.currentNode():
-        #self.fiducialNode = self.fiducialListSelector.currentNode()
-        #displayNode = self.fiducialNode.GetDisplayNode()
-        #displayNode.SetVisibility(0)
 
       self.disableButtonsAndSelectors()
       self.ProbeTrackButton.enabled = True
@@ -2036,11 +2003,10 @@ class BronchoscopyWidget:
       self.cameraForNavigation.SetViewUp(lastViewUp)
       camera.SetClippingRange(0.7081381565016212, 708.1381565016211) # to be checked
 
-      if self.points.GetNumberOfPoints() > 0:
+      if self.centerlinePointsList != []:
         self.CreateFiducialListButton.enabled = True
 
-      self.ProbeTrackButton.text = "Track Sensor"
-      
+      self.ProbeTrackButton.text = "Track Sensor"      
 
   def ReadPosition(self):
       if self.cNode.GetState() == 2:
@@ -2101,15 +2067,18 @@ class BronchoscopyWidget:
     originalCoord[1] = tMatrix.GetElement(1,3)
     originalCoord[2] = tMatrix.GetElement(2,3)
 
-    originalCoord = numpy.asarray(originalCoord)
+    originalCoord   = numpy.asarray(originalCoord)
+    self.centerlinePointsList = numpy.asarray(self.centerlinePointsList)
 
-    distance = ((self.pointsList-originalCoord)**2).sum(axis=1)
+    distance = ((self.centerlinePointsList-originalCoord)**2).sum(axis=1)
     ndx = distance.argsort()
-    closestPoint = self.pointsList[ndx[0]]
+    closestPoint = self.centerlinePointsList[ndx[0]]
 
     tMatrix.SetElement(0,3,closestPoint[0])
     tMatrix.SetElement(1,3,closestPoint[1])
     tMatrix.SetElement(2,3,closestPoint[2])
+
+    self.centerlinePointsList = self.centerlinePointsList.tolist()
 
     ####################################################################################################################
     # Continuosly Update ViewUp Of The Camera To Always Have It On One Direction Orthogonal To The Locator's Long Axis #
