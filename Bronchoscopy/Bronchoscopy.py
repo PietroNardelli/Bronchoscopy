@@ -2117,10 +2117,10 @@ class BronchoscopyWidget:
     #self.cameraForNavigation.SetFocalPoint(theorFP)
     self.cameraForNavigation.GetFocalPoint(d)
     print "real new FP: ", d'''  
-  
-    pathModel = self.pathModelSelector.currentNode()
-    pathPolyData = pathModel.GetPolyData()
-    self.distanceToTargetComputation(pathPolyData, closestPoint)
+    if len(self.pathModelNamesList) > 0:
+      pathModel = self.pathModelSelector.currentNode()
+      pathPolyData = pathModel.GetPolyData()
+      self.distanceToTargetComputation(pathPolyData, closestPoint)
 
   def distanceToTargetComputation(self, polyData, secondPoint):
 
