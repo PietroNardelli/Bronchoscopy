@@ -1472,7 +1472,7 @@ class BronchoscopyWidget:
 
         if AddedPathPointsList:
           if AddedPathPointsList.GetNumberOfFiducials() > 0:
-            firstPath.GetPoint(0)
+            firstPath.GetPoint(0,targetPos)
             AddedPathPointsList.AddFiducial(targetPos[0],targetPos[1],targetPos[2])
             computedPath = self.computeAddedPath(AddedPathPointsList)
             secondPath = self.createAddedPath(computedPath)
@@ -1483,17 +1483,16 @@ class BronchoscopyWidget:
           appendFilter.AddInputData(secondPath)
           appendFilter.Update()
         
+        ############################ Smooth centerline ###########################
+        if AddedPathPointsList:
+          createdPath = self.pathSmoothing(appendFilter.GetOutput())
+        else:
+          createdPath = self.pathSmoothing(firstPath)
         ############################ Make the path thicker #######################
         tubeFilter = vtk.vtkTubeFilter()
-        if AddedPathPointsList:
-          tubeFilter.SetInputData(appendFilter.GetOutput())
-          tubeFilter.SetRadius(0.1)
-          tubeFilter.SetNumberOfSides(50)
-        else:
-          tubeFilter.SetInputData(firstPath)
-          tubeFilter.SetRadius(0.15)
-          tubeFilter.SetNumberOfSides(50)          
-
+        tubeFilter.SetInputData(createdPath)
+        tubeFilter.SetRadius(0.12)
+        tubeFilter.SetNumberOfSides(50)
         tubeFilter.Update()
 
         ############################ Create The 3D Model Of The Path And Add It To The Scene ############################################# 
@@ -1613,11 +1612,11 @@ class BronchoscopyWidget:
       pathCreation.GenerateDelaunayTessellationOn()
       pathCreation.Update()
     
-      self.createdPath = pathCreation.GetOutput()
+      createdPath = pathCreation.GetOutput()
 
-      self.pathSmoothing(self.createdPath)
+      #self.pathSmoothing(self.createdPath)
 
-    return self.createdPath
+    return pathCreation.GetOutput()
      
   def pathSmoothing(self, pathModel):
       
@@ -1648,7 +1647,7 @@ class BronchoscopyWidget:
     centerlineSmoothing.SetSmoothingFactor(smoothfactor)
     centerlineSmoothing.Update()
     
-    self.createdPath = centerlineSmoothing.GetOutput()
+    return centerlineSmoothing.GetOutput()
 
 
   def computeAddedPath(self, fiducialListNode, dl=0.5):
