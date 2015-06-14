@@ -1428,6 +1428,14 @@ class BronchoscopyWidget:
       redLogic = redWidget.sliceLogic() 
 
   def onPathCreationButton(self):
+
+    if len(self.pathModelNamesList) > 0:
+      for n in xrange(len(self.pathModelNamesList)):
+        name = self.pathModelNamesList[n]
+        model = slicer.util.getNode(name)
+        slicer.mrmlScene.RemoveNode(model)
+      self.pathModelNamesList = []
+    
     fiducials = slicer.util.getNode('LabelsPoints')
 
     if fiducials:
@@ -1449,7 +1457,25 @@ class BronchoscopyWidget:
           if AddedPathPointsList.GetNumberOfFiducials() > 0:
             firstPath.GetPoint(0,targetPos)
             AddedPathPointsList.AddFiducial(targetPos[0],targetPos[1],targetPos[2])
-            computedPath = self.computeAddedPath(AddedPathPointsList)
+
+            listOfFiducials = []
+            distance = []
+            p=[0,0,0]
+            point=[0,0,0]
+            for n in xrange( AddedPathPointsList.GetNumberOfFiducials() ):
+              AddedPathPointsList.GetNthFiducialPosition(n,point)
+              p = [point[0],point[1],point[2]]
+              listOfFiducials.append(p)
+            
+            listOfFiducials = numpy.asarray(listOfFiducials)
+            targetPos = numpy.asarray(targetPos)
+            distance = ((listOfFiducials-targetPos)**2).sum(axis=1)
+            ndx = distance.argsort()
+            orderedList = []
+            for t in xrange(len(listOfFiducials)):
+              orderedList.append(listOfFiducials[ndx[t]])
+            
+            computedPath = self.computeAddedPath(orderedList)
             secondPath = self.createAddedPath(computedPath)
 
           # Merge the two path
@@ -1532,13 +1558,6 @@ class BronchoscopyWidget:
     Run the actual algorithm to create the path between the 2 fiducials
     """
     import vtkSlicerPathExtractionClassesModuleLogic as vmtkLogic
-
-    if len(self.pathModelNamesList) > 0:
-      for n in xrange(len(self.pathModelNamesList)):
-        name = self.pathModelNamesList[n]
-        model = slicer.util.getNode(name)
-        slicer.mrmlScene.RemoveNode(model)
-      self.pathModelNamesList = []
         
     inputPolyData = inputModel.GetPolyData()
 
@@ -1617,11 +1636,11 @@ class BronchoscopyWidget:
     return centerlineSmoothing.GetOutput()
 
 
-  def computeAddedPath(self, fiducialListNode, dl=0.5):
+  def computeAddedPath(self, fiducialList, dl=0.5):
 
     self.dl = dl # desired world space step size (in mm)
     self.dt = dl # current guess of parametric stepsize
-    self.fids = fiducialListNode
+    self.fids = fiducialList
 
     # hermite interpolation functions
     self.h00 = lambda t: 2*t**3 - 3*t**2     + 1
@@ -1630,44 +1649,16 @@ class BronchoscopyWidget:
     self.h11 = lambda t:   t**3 -   t**2
 
     # n is the number of control points in the piecewise curve
-
-    if self.fids.GetClassName() == "vtkMRMLAnnotationHierarchyNode":
-      # slicer4 style hierarchy nodes
-      collection = vtk.vtkCollection()
-      self.fids.GetChildrenDisplayableNodes(collection)
-      self.n = collection.GetNumberOfItems()
-      if self.n == 0:
-        return
-      self.p = numpy.zeros((self.n,3))
-      for i in xrange(self.n):
-        f = collection.GetItemAsObject(i)
-        coords = [0,0,0]
-        f.GetFiducialCoordinates(coords)
-        self.p[i] = coords
-    elif self.fids.GetClassName() == "vtkMRMLMarkupsFiducialNode":
-      # slicer4 Markups node
-      self.n = self.fids.GetNumberOfFiducials()
-      n = self.n
-      if n == 0:
-        return
-      # get fiducial positions
-      # sets self.p
-      self.p = numpy.zeros((n,3))
-      for i in xrange(n):
-        coord = [0.0, 0.0, 0.0]
-        self.fids.GetNthFiducialPosition(i, coord)
-        self.p[i] = coord
-    else:
-      # slicer3 style fiducial lists
-      self.n = self.fids.GetNumberOfFiducials()
-      n = self.n
-      if n == 0:
-        return
-      # get control point data
-      # sets self.p
-      self.p = numpy.zeros((n,3))
-      for i in xrange(n):
-        self.p[i] = self.fids.GetNthFiducialXYZ(i)
+    self.n = len(fiducialList)
+    n = self.n
+    if n == 0:
+      return
+    # get fiducial positions
+    # sets self.p
+    self.p = numpy.zeros((n,3))
+    for i in xrange(n):
+      #coord = [0.0, 0.0, 0.0]
+      self.p[i] = self.fids[i]
 
     # calculate the tangent vectors
     # - fm is forward difference
@@ -1799,12 +1790,10 @@ class BronchoscopyWidget:
 
     # Merge Centerline Points with Path Points 
     if self.centerlinePointsList != []:
-      print len(self.centerlinePointsList)
       pathPolydata = pathModel.GetPolyData()
       pathPoints = pathPolydata.GetPoints()
       for j in xrange(pathPoints.GetNumberOfPoints()):
         self.centerlinePointsList.append(pathPoints.GetPoint(j))
-      print len(self.centerlinePointsList)
 
     ###### Create a list of points from the vtkPoints object ############
     if self.centerlinePointsList != []:
