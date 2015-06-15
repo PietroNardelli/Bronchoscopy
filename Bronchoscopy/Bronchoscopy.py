@@ -47,7 +47,7 @@ class BronchoscopyWidget:
     self.layout = self.parent.layout()
     self.cameraNode = None
     self.cameraNodeObserverTag = None
-    self.cameraObserverTag= None
+    self.cameraObserverTag = None
 
     #
     # Sensor Tracking Variables
@@ -70,7 +70,9 @@ class BronchoscopyWidget:
     self.pathCreated = 0
 
     self.pathModelNamesList = []
-   
+
+    self.previousMatrixSigns = []
+    
     self.probeCalibrationTransform = None
     self.centerlineCompensationTransform = None
     self.cameraForNavigation = None
@@ -1365,7 +1367,7 @@ class BronchoscopyWidget:
 
     fidIndex = self.ROIsPoints.currentIndex
     ROIsList = slicer.util.getNode('ROIFiducials')
-    if ROIsList:
+    if fidIndex >= 0:
       fidPosition = [0,0,0]
       ROIsList.GetNthFiducialPosition(fidIndex, fidPosition)
 
@@ -1374,7 +1376,11 @@ class BronchoscopyWidget:
       greenWidget = self.layoutManager.sliceWidget('Green')
       greenLogic = greenWidget.sliceLogic()
       redWidget = self.layoutManager.sliceWidget('Red')
-      redLogic = redWidget.sliceLogic() 
+      redLogic = redWidget.sliceLogic()
+
+      yellowLogic.SetSliceOffset(fidPosition[0])
+      greenLogic.SetSliceOffset(fidPosition[1])
+      redLogic.SetSliceOffset(fidPosition[2])
 
   def onRedViewButton(self):
     self.fitSlicesToBackground()
@@ -1382,16 +1388,14 @@ class BronchoscopyWidget:
 
     fidIndex = self.ROIsPoints.currentIndex
     ROIsList = slicer.util.getNode('ROIFiducials')
-    if ROIsList:
+    if fidIndex >= 0:
       fidPosition = [0,0,0]
       ROIsList.GetNthFiducialPosition(fidIndex, fidPosition)
 
-      yellowWidget = self.layoutManager.sliceWidget('Yellow')
-      yellowLogic = yellowWidget.sliceLogic()
-      greenWidget = self.layoutManager.sliceWidget('Green')
-      greenLogic = greenWidget.sliceLogic()
       redWidget = self.layoutManager.sliceWidget('Red')
-      redLogic = redWidget.sliceLogic() 
+      redLogic = redWidget.sliceLogic()
+
+      redLogic.SetSliceOffset(fidPosition[2])
  
   def onYellowViewButton(self):
     self.fitSlicesToBackground()
@@ -1399,16 +1403,15 @@ class BronchoscopyWidget:
 
     fidIndex = self.ROIsPoints.currentIndex
     ROIsList = slicer.util.getNode('ROIFiducials')
-    if ROIsList:
+    if fidIndex >= 0:
       fidPosition = [0,0,0]
       ROIsList.GetNthFiducialPosition(fidIndex, fidPosition)
 
       yellowWidget = self.layoutManager.sliceWidget('Yellow')
       yellowLogic = yellowWidget.sliceLogic()
-      greenWidget = self.layoutManager.sliceWidget('Green')
-      greenLogic = greenWidget.sliceLogic()
-      redWidget = self.layoutManager.sliceWidget('Red')
-      redLogic = redWidget.sliceLogic() 
+
+      yellowLogic.SetSliceOffset(fidPosition[0])
+
 
   def onGreenViewButton(self):
     self.fitSlicesToBackground()
@@ -1416,16 +1419,14 @@ class BronchoscopyWidget:
 
     fidIndex = self.ROIsPoints.currentIndex
     ROIsList = slicer.util.getNode('ROIFiducials')
-    if ROIsList:
+    if fidIndex >= 0:
       fidPosition = [0,0,0]
       ROIsList.GetNthFiducialPosition(fidIndex, fidPosition)
 
-      yellowWidget = self.layoutManager.sliceWidget('Yellow')
-      yellowLogic = yellowWidget.sliceLogic()
       greenWidget = self.layoutManager.sliceWidget('Green')
       greenLogic = greenWidget.sliceLogic()
-      redWidget = self.layoutManager.sliceWidget('Red')
-      redLogic = redWidget.sliceLogic() 
+
+      greenLogic.SetSliceOffset(fidPosition[1])
 
   def onPathCreationButton(self):
 
@@ -2045,18 +2046,18 @@ class BronchoscopyWidget:
       
   def CheckCurrentPosition(self, tMatrix):
 
+    #################################
+    ####### Check translation #######
+    #################################
+    
     distance = []
 
-    '''if self.fiducialNode == None:
-      fiducialNodesCollection = slicer.mrmlScene.GetNodesByName('CenterlineFiducials')
-      self.fiducialNode = fiducialNodesCollection.GetItemAsObject(0)'''
-
-    originalCoord = [0,0,0]
+    originalCoord = [0.0,0.0,0.0]
     originalCoord[0] = tMatrix.GetElement(0,3)
     originalCoord[1] = tMatrix.GetElement(1,3)
     originalCoord[2] = tMatrix.GetElement(2,3)
 
-    originalCoord   = numpy.asarray(originalCoord)
+    originalCoord = numpy.asarray(originalCoord)
     self.centerlinePointsList = numpy.asarray(self.centerlinePointsList)
 
     distance = ((self.centerlinePointsList-originalCoord)**2).sum(axis=1)
@@ -2068,6 +2069,100 @@ class BronchoscopyWidget:
     tMatrix.SetElement(2,3,closestPoint[2])
 
     self.centerlinePointsList = self.centerlinePointsList.tolist()
+
+    ##################################################
+    ####### Compare rotation with previous one #######
+    ##################################################
+    ISRotation = []
+    
+    firstRow  = [0.0,0.0]
+    secondRow = [0.0,0.0]
+    thirdRow  = [0.0,0.0]
+
+    firstRow[0] = tMatrix.GetElement(0,0)
+    firstRow[1] = tMatrix.GetElement(0,1)
+
+    ISRotation.append(firstRow)
+
+    secondRow[0] = tMatrix.GetElement(1,0)
+    secondRow[1] = tMatrix.GetElement(1,1)
+
+    ISRotation.append(secondRow)
+
+    thirdRow[0] = tMatrix.GetElement(2,0)
+    thirdRow[1] = tMatrix.GetElement(2,1)
+
+    ISRotation.append(thirdRow)
+
+    ISRotation = numpy.asarray(ISRotation)
+    newMatrixSigns = numpy.sign(ISRotation)
+
+    if len(self.previousMatrixSigns) == 0:
+      self.previousMatrixSigns = newMatrixSigns
+
+    tMatrix.SetElement(0,0,abs(firstRow[0])  * self.previousMatrixSigns[0,0])
+    tMatrix.SetElement(0,1,abs(firstRow[1])  * self.previousMatrixSigns[0,1])
+    tMatrix.SetElement(1,0,abs(secondRow[0]) * self.previousMatrixSigns[1,0])
+    tMatrix.SetElement(1,1,abs(secondRow[1]) * self.previousMatrixSigns[1,1])
+    tMatrix.SetElement(2,0,abs(thirdRow[0])  * self.previousMatrixSigns[2,0])
+    tMatrix.SetElement(2,1,abs(thirdRow[1])  * self.previousMatrixSigns[2,1]) 
+
+    '''if len(self.previousMatrixSigns) > 0:
+      changeSign = -1
+      if (newMatrixSigns != self.previousMatrixSigns).all():        
+        newMatrixSigns = newMatrixSigns * changeSign
+
+        tMatrix.SetElement(0,0,firstRow[0]  * changeSign)
+        tMatrix.SetElement(0,1,firstRow[1]  * changeSign)
+        tMatrix.SetElement(1,0,secondRow[0] * changeSign)
+        tMatrix.SetElement(1,1,secondRow[1] * changeSign)
+        tMatrix.SetElement(2,0,thirdRow[0]  * changeSign)
+        tMatrix.SetElement(2,1,thirdRow[1]  * changeSign)        
+      elif (newMatrixSigns[0][0] != self.previousMatrixSigns[0][0] and newMatrixSigns[0][1] != self.previousMatrixSigns[0][1] and
+            newMatrixSigns[1][1] != self.previousMatrixSigns[1][1] and newMatrixSigns[2][0] != self.previousMatrixSigns[2][0] and
+            newMatrixSigns[2][1] != self.previousMatrixSigns[2][1] and newMatrixSigns[1][0] == self.previousMatrixSigns[1][0]):
+        newMatrixSigns = newMatrixSigns * changeSign
+        newMatrixSigns[1][0] = newMatrixSigns[1][0] * changeSign
+        tMatrix.SetElement(0,0,firstRow[0]  * changeSign)
+        tMatrix.SetElement(0,1,firstRow[1]  * changeSign)
+        tMatrix.SetElement(1,1,secondRow[1] * changeSign)
+        tMatrix.SetElement(2,0,thirdRow[0]  * changeSign)
+        tMatrix.SetElement(2,1,thirdRow[1]  * changeSign)
+      elif (newMatrixSigns[0][0] == self.previousMatrixSigns[0][0] and newMatrixSigns[0][1] == self.previousMatrixSigns[0][1] and
+            newMatrixSigns[1][1] == self.previousMatrixSigns[1][1] and newMatrixSigns[2][0] == self.previousMatrixSigns[2][0] and
+            newMatrixSigns[2][1] == self.previousMatrixSigns[2][1] and newMatrixSigns[1][0] != self.previousMatrixSigns[1][0]):
+        newMatrixSigns[1][0] = newMatrixSigns[1][0] * changeSign
+        tMatrix.SetElement(1,0,secondRow[0]  * changeSign)
+      elif (newMatrixSigns[0][0] != self.previousMatrixSigns[0][0] and newMatrixSigns[0][1] != self.previousMatrixSigns[0][1] and
+            newMatrixSigns[1][1] != self.previousMatrixSigns[1][1] and newMatrixSigns[2][0] != self.previousMatrixSigns[2][0] and
+            newMatrixSigns[1][0] == self.previousMatrixSigns[1][0] and newMatrixSigns[2][1] == self.previousMatrixSigns[2][1]):
+        newMatrixSigns = newMatrixSigns * changeSign
+        newMatrixSigns[1][0] = newMatrixSigns[1][0] * changeSign
+        newMatrixSigns[2][1] = newMatrixSigns[2][1] * changeSign
+        tMatrix.SetElement(0,0,firstRow[0]  * changeSign)
+        tMatrix.SetElement(0,1,firstRow[1]  * changeSign)
+        tMatrix.SetElement(1,1,secondRow[1] * changeSign)
+        tMatrix.SetElement(2,0,thirdRow[0]  * changeSign)
+      elif (newMatrixSigns[0][0] == self.previousMatrixSigns[0][0] and newMatrixSigns[0][1] == self.previousMatrixSigns[0][1] and
+            newMatrixSigns[1][1] == self.previousMatrixSigns[1][1] and newMatrixSigns[2][0] == self.previousMatrixSigns[2][0] and
+            newMatrixSigns[1][0] != self.previousMatrixSigns[1][0] and newMatrixSigns[2][1] != self.previousMatrixSigns[2][1]):
+        newMatrixSigns[1][0] = newMatrixSigns[1][0] * changeSign
+        tMatrix.SetElement(1,0,secondRow[0]  * changeSign)
+        newMatrixSigns[2][1] = newMatrixSigns[2][1] * changeSign
+        tMatrix.SetElement(1,0,secondRow[0]  * changeSign)
+        tMatrix.SetElement(2,1,thirdRow[1]  * changeSign)
+      elif (newMatrixSigns[0][0] != self.previousMatrixSigns[0][0] and newMatrixSigns[0][1] != self.previousMatrixSigns[0][1] and
+            newMatrixSigns[1][1] != self.previousMatrixSigns[1][1] and newMatrixSigns[2][0] != self.previousMatrixSigns[2][0] and
+            newMatrixSigns[1][0] == self.previousMatrixSigns[1][0] and newMatrixSigns[2][1] == self.previousMatrixSigns[2][1]):
+        newMatrixSigns = newMatrixSigns * changeSign
+        newMatrixSigns[1][0] = newMatrixSigns[1][0] * changeSign
+        newMatrixSigns[2][1] = newMatrixSigns[2][1] * changeSign
+        tMatrix.SetElement(0,0,firstRow[0]  * changeSign)
+        tMatrix.SetElement(0,1,firstRow[1]  * changeSign)
+        tMatrix.SetElement(1,1,secondRow[1] * changeSign)
+        tMatrix.SetElement(2,0,thirdRow[0]  * changeSign)
+
+    self.previousMatrixSigns = newMatrixSigns'''
 
     ####################################################################################################################
     # Continuosly Update ViewUp Of The Camera To Always Have It On One Direction Orthogonal To The Locator's Long Axis #
@@ -2262,11 +2357,13 @@ class BronchoscopyWidget:
 
     cliRegistrationNode = slicer.cli.run( imageRegistration,None,parameters,wait_for_completion=True )
     angle = cliRegistrationNode.GetParameterDefault(0,2)
-    angle = int(angle)
+    #angle = int(angle)
 
-    self.firstThreeDView.rollDirection = self.firstThreeDView.RollRight
-    self.firstThreeDView.pitchRollYawIncrement = abs(angle)
-    self.firstThreeDView.roll()
+    #self.firstThreeDView.rollDirection = self.firstThreeDView.RollRight
+    #self.firstThreeDView.pitchRollYawIncrement = abs(angle)
+    #self.firstThreeDView.roll()
+    camera = self.cameraForNavigation.GetCamera()
+    camera.Roll(angle)
 
     slicer.mrmlScene.RemoveNode(movingScalarVolume)
     slicer.mrmlScene.RemoveNode(realScalarVolume)
