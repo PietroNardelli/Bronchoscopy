@@ -73,10 +73,15 @@ class BronchoscopyWidget:
 
     self.previousMatrixSigns = []
     
+    self.flipCompensationTransform = None
     self.probeCalibrationTransform = None
     self.centerlineCompensationTransform = None
     self.cameraForNavigation = None
     self.cNode = None
+    self.lastFPBeforeStoppingTracking = [0,0,0]
+    self.lastPosBeforeStoppingTracking = [0,0,0]
+    self.lastViewUp = [0,0,0]
+
     self.probeToTrackerTransformNode = None
     self.videoStreamingNode = None
 
@@ -218,11 +223,12 @@ class BronchoscopyWidget:
     self.registrationSelector.showChildNodeTypes = False
     self.registrationSelector.setMRMLScene( slicer.mrmlScene )
     self.registrationSelector.setToolTip( "Select registration fiducial points" )
+    self.registrationSelector.setFixedWidth(200)
     #registrationFormLayout.addRow("Registration Fiducials List: ", self.registrationSelector)
 
     self.createRegistrationFiducialsButton = qt.QPushButton("Create Registration Points List")
     self.createRegistrationFiducialsButton.toolTip = "Create fiducial list for the registration."
-    self.createRegistrationFiducialsButton.setFixedSize(160,35)
+    self.createRegistrationFiducialsButton.setFixedSize(200,35)
     self.createRegistrationFiducialsButton.setStyleSheet("background-color: rgb(255,246,142)")
 
     regBox.addWidget(self.registrationSelector)
@@ -230,14 +236,14 @@ class BronchoscopyWidget:
 
     self.folderPathSelection = qt.QLineEdit()
     self.folderPathSelection.setReadOnly(True)
-    #self.folderPathSelection.setFixedWidth(200)
+    self.folderPathSelection.setFixedWidth(200)
 
     selectionBox = qt.QHBoxLayout()
     registrationFormLayout.addRow(selectionBox)
 
     self.selectFolderButton = qt.QPushButton("Select Folder")
     self.selectFolderButton.toolTip = "Select folder where to save the txt file containing the fiducial points."
-    self.selectFolderButton.setFixedSize(100,35)
+    self.selectFolderButton.setFixedSize(200,35)
     self.selectFolderButton.setStyleSheet("background-color: rgb(255,246,142)")
 
     selectionBox.addWidget(self.folderPathSelection)
@@ -559,7 +565,9 @@ class BronchoscopyWidget:
     trackerCollapsibleButton.text = "Probe Tracking"
     self.layout.addWidget(trackerCollapsibleButton)
     self.layout.setSpacing(20)
-    trackerFormLayout = qt.QVBoxLayout(trackerCollapsibleButton)
+    trackerFormLayout = qt.QFormLayout(trackerCollapsibleButton)
+
+    trackerButtonLayout = qt.QHBoxLayout()
 
     ##############################################################################################
     ###############################  Matlab/Probe Track Button  ##################################
@@ -570,19 +578,9 @@ class BronchoscopyWidget:
     #self.ProbeTrackButton.setFixedHeight(40)
     self.ProbeTrackButton.checkable = True
    
-    trackerFormLayout.addWidget(self.ProbeTrackButton, 0, 4)
+    trackerButtonLayout.addWidget(self.ProbeTrackButton, 0, 4)
 
-    ##############################################################################################
-    ##################################  Reset Camera Button  #####################################
-    ##############################################################################################
-
-    self.ResetCameraButton = qt.QPushButton("Reset Camera")
-
-    self.ResetCameraButton.toolTip = "Reset camera if moved away."
-    self.ResetCameraButton.setFixedSize(100,50)
-    self.ResetCameraButton.enabled = False
-    
-    trackerFormLayout.addWidget(self.ResetCameraButton, 0, 4)
+    trackerFormLayout.addRow(trackerButtonLayout)
 
     # Enable ProbeTracKButton
     if self.fiducialListSelector.currentNode() or self.centerlinePointsList != []:
@@ -590,6 +588,21 @@ class BronchoscopyWidget:
     else:
         self.ProbeTrackButton.enabled = False
 
+    ############################################################################################
+    ##################################  Flip Image Button  #####################################
+    ############################################################################################
+
+    self.FlipImageButton = qt.QPushButton("180 Flip")
+
+    self.FlipImageButton.toolTip = "Compensate for possible 180 degree camera flipping."
+    self.FlipImageButton.setFixedSize(100,35)
+    self.FlipImageButton.enabled = False
+
+    flippingBox = qt.QHBoxLayout()
+    
+    flippingBox.addWidget(self.FlipImageButton, 0, 4)
+
+    trackerFormLayout.addRow(flippingBox)
 
     ########################################################################################
     ################################ Image Registration ####################################
@@ -600,8 +613,8 @@ class BronchoscopyWidget:
     self.layout.setSpacing(20)
     imgRegFormLayout = qt.QFormLayout(imgRegCollapsibleButton)
 
-    realImgSelectionBox = qt.QHBoxLayout()
-    imgRegFormLayout.addRow(realImgSelectionBox)
+    #realImgSelectionBox = qt.QHBoxLayout()
+    #imgRegFormLayout.addRow(realImgSelectionBox)
 
     self.ImageRegistrationButton = qt.QPushButton("Start Image Registration")
     self.ImageRegistrationButton.toolTip = "Start registration between real and virtual images."
@@ -669,7 +682,7 @@ class BronchoscopyWidget:
     self.pathModelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onPathSelect)
 
     self.ProbeTrackButton.connect('toggled(bool)', self.onProbeTrackButtonToggled)
-    self.ResetCameraButton.connect('clicked(bool)',self.onResetCameraButtonPressed)
+    self.FlipImageButton.connect('clicked(bool)', self.onFlipImageButton)
 
     self.ImageRegistrationButton.connect('toggled(bool)',self.onStartImageRegistrationButtonPressed)
 
@@ -721,7 +734,7 @@ class BronchoscopyWidget:
         self.ProbeTrackButton.enabled = True
       else:
         self.ProbeTrackButton.enabled = False
-        self.ResetCameraButton.enabled = False
+        self.FlipImageButton.enabled = False
         #self.ImageRegistrationButton.enabled = False
     else:
       self.ExtractCenterlineButton.enabled = False
@@ -729,7 +742,7 @@ class BronchoscopyWidget:
       self.PathCreationButton.enabled = False
       self.PathCreationButton.setStyleSheet("background-color: rgb(255,255,255)")
       self.ProbeTrackButton.enabled = False
-      self.ResetCameraButton.enabled = False
+      self.FlipImageButton.enabled = False
       #self.ImageRegistrationButton.enabled = False
 
     if self.ROIsPoints.currentIndex >= 0:
@@ -783,7 +796,7 @@ class BronchoscopyWidget:
     self.PathCreationButton.enabled = False
     self.PathCreationButton.setStyleSheet("background-color: rgb(255,255,255)")    
     self.ProbeTrackButton.enabled = False
-    self.ResetCameraButton.enabled = False
+    self.FlipImageButton.enabled = False
     #self.ImageRegistrationButton.enabled = False
 
     self.inputSelector.enabled = False
@@ -1563,7 +1576,7 @@ class BronchoscopyWidget:
         modelDisplay.SetScene(slicer.mrmlScene)
         modelDisplay.LightingOff()
         modelDisplay.SetSliceIntersectionVisibility(1)
-        modelDisplay.SetSliceIntersectionThickness(5)
+        modelDisplay.SetSliceIntersectionThickness(10)
         slicer.mrmlScene.AddNode(modelDisplay)
         model.SetAndObserveDisplayNodeID(modelDisplay.GetID())
 
@@ -1911,7 +1924,7 @@ class BronchoscopyWidget:
 
       self.disableButtonsAndSelectors()
       self.ProbeTrackButton.enabled = True
-      self.ResetCameraButton.enabled = True
+      self.FlipImageButton.enabled = True
 
       self.ProbeTrackButton.text = "Stop Tracking"
 
@@ -1927,6 +1940,17 @@ class BronchoscopyWidget:
       self.cNode.SetType(1)
       self.cNode.SetTypeServer(18944)
       self.cNode.Start()
+
+      ################## Transform matrix to compensate for possible flipping of the 3D image #####################
+
+      if self.flipCompensationTransform == None:
+        flipCompensationTransformNodes = slicer.mrmlScene.GetNodesByName('flipCompensationTransform')
+        if flipCompensationTransformNodes.GetNumberOfItems() == 0:
+          self.flipCompensationTransform = slicer.vtkMRMLLinearTransformNode()
+          self.flipCompensationTransform.SetName('flipCompensationTransform')
+          slicer.mrmlScene.AddNode(self.flipCompensationTransform)
+        else:
+	  self.flipCompensationTransform = flipCompensationTransformNodes.GetItemAsObject(0)
 
       ################## This turns the probe of 90 degrees when the tracking is started the first time #####################
 
@@ -1946,6 +1970,10 @@ class BronchoscopyWidget:
       calibrationMatrix.SetElement(2,0,-1)
       calibrationMatrix.SetElement(2,2,0)
       self.probeCalibrationTransform.SetMatrixTransformToParent(calibrationMatrix)
+
+      self.probeCalibrationTransform.SetAndObserveTransformNodeID(self.flipCompensationTransform.GetID())
+
+      # Transform to compensate probe position with with centerline points
 
       if self.centerlineCompensationTransform == None:
         centerlineCompensationTransformNodes = slicer.mrmlScene.GetNodesByName('centerlineCompensationTransform')
@@ -1983,7 +2011,7 @@ class BronchoscopyWidget:
 
       ################## Camera 1 is connected to the transform #####################
          
-      self.onResetCameraButtonPressed()
+      self.initializeCamera()
       self.cameraForNavigation.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
       
       ####################### Set clipping range for the first camera ####################
@@ -2016,7 +2044,7 @@ class BronchoscopyWidget:
        
     else:  # When button is released...      
       self.ProbeTrackButton.setStyleSheet("background-color: rgb(255,255,255)")
-      self.ResetCameraButton.enabled = False
+      self.FlipImageButton.enabled = False
       #self.ImageRegistrationButton.enabled = False
 
       self.sensorTimer.stop()
@@ -2026,21 +2054,17 @@ class BronchoscopyWidget:
       #self.cameraForNavigation = None
       #self.probeCalibrationTransform = None
 
-      lastFPBeforeStoppingTracking = [0,0,0]
-      lastPosBeforeStoppingTracking = [0,0,0]
-      lastViewUp = [0,0,0]
-
-      self.cameraForNavigation.GetFocalPoint(lastFPBeforeStoppingTracking)
-      self.cameraForNavigation.GetPosition(lastPosBeforeStoppingTracking)
-      self.cameraForNavigation.GetViewUp(lastViewUp)
+      self.cameraForNavigation.GetFocalPoint(self.lastFPBeforeStoppingTracking)
+      self.cameraForNavigation.GetPosition(self.lastPosBeforeStoppingTracking)
+      self.cameraForNavigation.GetViewUp(self.lastViewUp)
 
       self.enableSelectors()
       self.onSelect()
 
-      self.cameraForNavigation.SetFocalPoint(lastFPBeforeStoppingTracking[0],lastFPBeforeStoppingTracking[1],lastFPBeforeStoppingTracking[2])
-      self.cameraForNavigation.SetPosition(lastPosBeforeStoppingTracking[0],lastPosBeforeStoppingTracking[1],lastPosBeforeStoppingTracking[2])
+      self.cameraForNavigation.SetFocalPoint(self.lastFPBeforeStoppingTracking[0],self.lastFPBeforeStoppingTracking[1],self.lastFPBeforeStoppingTracking[2])
+      self.cameraForNavigation.SetPosition(self.lastPosBeforeStoppingTracking[0],self.lastPosBeforeStoppingTracking[1],self.lastPosBeforeStoppingTracking[2])
       camera = self.cameraForNavigation.GetCamera()  
-      self.cameraForNavigation.SetViewUp(lastViewUp)
+      self.cameraForNavigation.SetViewUp(self.lastViewUp)
       camera.SetClippingRange(0.7081381565016212, 708.1381565016211) # to be checked
 
       if self.centerlinePointsList != []:
@@ -2060,12 +2084,12 @@ class BronchoscopyWidget:
           transformMatrix = vtk.vtkMatrix4x4()
           self.probeToTrackerTransformNode.GetMatrixTransformToParent(transformMatrix)
 
-          if self.probeCalibrationTransform.GetTransformNodeID() == None:
-            self.probeCalibrationTransform.SetAndObserveTransformNodeID(self.centerlineCompensationTransform.GetID())
+          if self.flipCompensationTransform.GetTransformNodeID() == None:
+            self.flipCompensationTransform.SetAndObserveTransformNodeID(self.centerlineCompensationTransform.GetID())
 
           self.CheckCurrentPosition(transformMatrix)
   
-  def onResetCameraButtonPressed(self):
+  def initializeCamera(self):
     cameraNodes = slicer.mrmlScene.GetNodesByName('Default Scene Camera')
     self.cameraForNavigation = cameraNodes.GetItemAsObject(0)
     if cameraNodes.GetNumberOfItems() > 0:
@@ -2075,25 +2099,32 @@ class BronchoscopyWidget:
         viewUp = [0.0,0.0,-1.0]
         self.cameraForNavigation.SetViewUp(viewUp)
       else:
-        tNode = slicer.util.getNode('centerlineCompensationTransform')
-        if tNode:
-          transformMatrix = vtk.vtkMatrix4x4()
-          tNode.GetMatrixTransformToParent(transformMatrix)
-          pos = [0,0,0]
-          pos[0] = transformMatrix.GetElement(0,3)
-          pos[1] = transformMatrix.GetElement(1,3)
-          pos[2] = transformMatrix.GetElement(2,3)
-          self.cameraForNavigation.SetPosition(pos[0],pos[1],pos[2])
-          camera = self.cameraForNavigation.GetCamera()
-          vpn = camera.GetViewPlaneNormal()
-          pos = numpy.asarray(pos)
-          vpn=numpy.asarray(vpn)
-          FP = pos-4*vpn
-          #self.cameraForNavigation.GetFocalPoint(FP)
-          self.cameraForNavigation.SetFocalPoint(FP[0],FP[1],FP[2])
+        if self.lastFPBeforeStoppingTracking != [0,0,0] and self.lastPosBeforeStoppingTracking != [0,0,0] and self.lastViewUp != [0,0,0]:
+          self.cameraForNavigation.SetFocalPoint(self.lastFPBeforeStoppingTracking[0],self.lastFPBeforeStoppingTracking[1],self.lastFPBeforeStoppingTracking[2])
+          self.cameraForNavigation.SetPosition(self.lastPosBeforeStoppingTracking[0],self.lastPosBeforeStoppingTracking[1],self.lastPosBeforeStoppingTracking[2])
+          camera = self.cameraForNavigation.GetCamera()  
+          self.cameraForNavigation.SetViewUp(self.lastViewUp)
+          camera.SetClippingRange(0.7081381565016212, 708.1381565016211)
+
+          self.lastFPBeforeStoppingTracking  = [0,0,0]
+          self.lastPosBeforeStoppingTracking = [0,0,0]
+          self.lastViewUp = [0,0,0]
 
       self.cameraForNavigation.SetViewAngle(55)
-      
+
+  def onFlipImageButton(self):
+    if self.flipCompensationTransform:
+      flipMatrix = vtk.vtkMatrix4x4()
+      self.flipCompensationTransform.GetMatrixTransformToParent(flipMatrix)
+      firstElement = flipMatrix.GetElement(0,0)
+      fifthElement = flipMatrix.GetElement(1,1)
+
+      changeSign = -1
+      flipMatrix.SetElement(0,0,firstElement*changeSign)
+      flipMatrix.SetElement(1,1,fifthElement*changeSign)
+
+      self.flipCompensationTransform.SetMatrixTransformToParent(flipMatrix)
+
   def CheckCurrentPosition(self, tMatrix):
 
     #################################
