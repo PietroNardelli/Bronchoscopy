@@ -371,13 +371,12 @@ class BronchoscopyWidget:
     self.pathCreationCollapsibleButton = ctk.ctkCollapsibleButton()
     self.pathCreationCollapsibleButton.text = "Procedure Planning"
     self.pathCreationCollapsibleButton.setChecked(True)
-    self.pathCreationCollapsibleButton.enabled = True
     self.layout.addWidget(self.pathCreationCollapsibleButton)
     pathCreationFormLayout = qt.QFormLayout(self.pathCreationCollapsibleButton)
 
     # Button To Create A Fiducial List Containing All The Points On The ROIs
 
-    self.pointsListSelector = slicer.qMRMLNodeComboBox()
+    '''self.pointsListSelector = slicer.qMRMLNodeComboBox()
     self.pointsListSelector.nodeTypes = ( ("vtkMRMLMarkupsFiducialNode"), "" )
     self.pointsListSelector.selectNodeUponCreation = True
     self.pointsListSelector.addEnabled = True
@@ -389,21 +388,21 @@ class BronchoscopyWidget:
     self.pointsListSelector.setMRMLScene( slicer.mrmlScene )
     self.pointsListSelector.setToolTip( "Select points indicating ROIs to reach." )
     self.pointsListSelector.setFixedWidth(180)
-    pathCreationFormLayout.addRow("ROI(s) Points List: ", self.pointsListSelector)
+    pathCreationFormLayout.addRow("ROI(s) Points List: ", self.pointsListSelector)'''
 
     self.createROIFiducialsButton = qt.QPushButton("Add New ROI Point(s)")
     self.createROIFiducialsButton.toolTip = "Add new ROI point(s)."
     self.createROIFiducialsButton.setFixedSize(160,35)
 
-    ROIBox = qt.QHBoxLayout()
-    pathCreationFormLayout.addRow(ROIBox)
+    pointsButtonsBox = qt.QHBoxLayout()
+    pathCreationFormLayout.addRow(pointsButtonsBox)
 
-    ROIBox.addWidget(self.pointsListSelector)
-    ROIBox.addWidget(self.createROIFiducialsButton)
+    #ROIBox.addWidget(self.pointsListSelector, 0, 4)
+    pointsButtonsBox.addWidget(self.createROIFiducialsButton, 0, 4)
 
     # Button To Create A Fiducial List Containing The Points On The Labels Closest To The ROIs
 
-    self.labelPointsListSelector = slicer.qMRMLNodeComboBox()
+    '''self.labelPointsListSelector = slicer.qMRMLNodeComboBox()
     self.labelPointsListSelector.nodeTypes = ( ("vtkMRMLMarkupsFiducialNode"), "" )
     self.labelPointsListSelector.selectNodeUponCreation = True
     self.labelPointsListSelector.addEnabled = True
@@ -415,17 +414,18 @@ class BronchoscopyWidget:
     self.labelPointsListSelector.setMRMLScene( slicer.mrmlScene )
     self.labelPointsListSelector.setToolTip( "Select points on the label closest to the ROI." )
     self.labelPointsListSelector.setFixedWidth(180)
-    pathCreationFormLayout.addRow("Label(s) Points List: ", self.labelPointsListSelector)
+    pathCreationFormLayout.addRow("Label(s) Points List: ", self.labelPointsListSelector)'''
 
     self.createLabelsFiducialsButton = qt.QPushButton("Add New Label Point(s)")
     self.createLabelsFiducialsButton.toolTip = "Add point(s) on the closest labels to the ROIs."
     self.createLabelsFiducialsButton.setFixedSize(160,35)
+    self.createLabelsFiducialsButton.enabled = False
 
-    labelsBox = qt.QHBoxLayout()
-    pathCreationFormLayout.addRow(labelsBox)
+    #labelsBox = qt.QHBoxLayout()
+    #pathCreationFormLayout.addRow(labelsBox)
 
-    labelsBox.addWidget(self.labelPointsListSelector)
-    labelsBox.addWidget(self.createLabelsFiducialsButton)
+    #labelsBox.addWidget(self.labelPointsListSelector, 0, 4)
+    pointsButtonsBox.addWidget(self.createLabelsFiducialsButton, 0, 4)
 
     # Combobox listing all the ROIs points
     self.ROIsPoints = qt.QComboBox()
@@ -435,13 +435,14 @@ class BronchoscopyWidget:
     self.createNewPathPointsButton = qt.QPushButton("Add New Path Point(s)")
     self.createNewPathPointsButton.toolTip = "Add new path point(s) to improve path creation."
     self.createNewPathPointsButton.setFixedSize(160,35)
+    self.createNewPathPointsButton.enabled = False
 
     ROIPointSelectionBox = qt.QHBoxLayout()
     #pathCreationFormLayout.addRow("New Path Points List: ",)
     pathCreationFormLayout.addRow(ROIPointSelectionBox)
 
-    ROIPointSelectionBox.addWidget(self.ROIsPoints)
-    ROIPointSelectionBox.addWidget(self.createNewPathPointsButton)
+    ROIPointSelectionBox.addWidget(self.ROIsPoints, 0, 4)
+    ROIPointSelectionBox.addWidget(self.createNewPathPointsButton, 0, 4)
     
     # 
     # Buttons to enlarge views upon request
@@ -504,13 +505,14 @@ class BronchoscopyWidget:
     self.PathCreationButton = qt.QPushButton("Create Path(s)")
     self.PathCreationButton.toolTip = "Run the algorithm to create the path between the specified points."
     self.PathCreationButton.setFixedSize(300,50)
+    self.PathCreationButton.enabled = False
 
-    if self.inputSelector.currentNode() and self.pointsListSelector.currentNode() and self.centerlinePointsList != []:
+    '''if self.inputSelector.currentNode() and self.pointsListSelector.currentNode() and self.centerlinePointsList != []:
         self.PathCreationButton.enabled = True
         self.PathCreationButton.setStyleSheet("background-color: rgb(255,246,142)")
     else:
         self.PathCreationButton.enabled = False
-        self.PathCreationButton.setStyleSheet("background-color: rgb(255,255,255)")
+        self.PathCreationButton.setStyleSheet("background-color: rgb(255,255,255)")'''
 
     bLayout = qt.QVBoxLayout()
 
@@ -651,7 +653,7 @@ class BronchoscopyWidget:
     self.fiducialListSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.CreateFiducialListButton.connect('clicked(bool)',self.onCreateAndSaveFiducialList)
 
-    self.pointsListSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
+    #self.pointsListSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.createROIFiducialsButton.connect('clicked(bool)', self.onCreateROIFiducialsList)
     self.createLabelsFiducialsButton.connect('clicked(bool)', self.onCreateLabelsFiducialsList)
     self.ROIsPoints.connect('currentIndexChanged(int)', self.showSelectedROI)
@@ -730,15 +732,44 @@ class BronchoscopyWidget:
       self.ResetCameraButton.enabled = False
       #self.ImageRegistrationButton.enabled = False
 
-    if self.inputSelector.currentNode() and self.pointsListSelector.currentNode() and self.centerlinePointsList != []:
-       self.PathCreationButton.enabled = True
-       self.PathCreationButton.setStyleSheet("background-color: rgb(255,246,142)")
+    if self.ROIsPoints.currentIndex >= 0:
+ 
+      self.createLabelsFiducialsButton.enabled = True
+      self.createNewPathPointsButton.enabled = True
+
+      if self.inputSelector.currentNode() and self.centerlinePointsList != []:
+         self.PathCreationButton.enabled = True
+         self.PathCreationButton.setStyleSheet("background-color: rgb(255,246,142)")
+      else:
+         self.PathCreationButton.enabled = False
+         self.PathCreationButton.setStyleSheet("background-color: rgb(255,255,255)")
     else:
+       self.createLabelsFiducialsButton.enabled = False
+       self.createNewPathPointsButton.enabled = False
        self.PathCreationButton.enabled = False
        self.PathCreationButton.setStyleSheet("background-color: rgb(255,255,255)")
 
     if self.centerlinePointsList != []:
       self.CreateFiducialListButton.enabled = True
+
+  def onPathCreationSelection(self):
+
+    if self.ROIsPoints.currentIndex >= 0:
+ 
+      self.createLabelsFiducialsButton.enabled = True
+      self.createNewPathPointsButton.enabled = True
+
+      if self.inputSelector.currentNode() and self.centerlinePointsList != []:
+         self.PathCreationButton.enabled = True
+         self.PathCreationButton.setStyleSheet("background-color: rgb(255,246,142)")
+      else:
+         self.PathCreationButton.enabled = False
+         self.PathCreationButton.setStyleSheet("background-color: rgb(255,255,255)")
+    else:
+       self.createLabelsFiducialsButton.enabled = False
+       self.createNewPathPointsButton.enabled = False
+       self.PathCreationButton.enabled = False
+       self.PathCreationButton.setStyleSheet("background-color: rgb(255,255,255)")
 
   def disableButtonsAndSelectors(self):
 
@@ -758,7 +789,7 @@ class BronchoscopyWidget:
     self.inputSelector.enabled = False
     self.labelSelector.enabled = False
     self.fiducialListSelector.enabled = False
-    self.pointsListSelector.enabled = False
+    #self.pointsListSelector.enabled = False
     self.registrationSelector.enabled = False
 
   def enableSelectors(self):
@@ -772,7 +803,7 @@ class BronchoscopyWidget:
     self.inputSelector.enabled = True
     self.labelSelector.enabled = True
     self.fiducialListSelector.enabled = True
-    self.pointsListSelector.enabled = True
+    #self.pointsListSelector.enabled = True
     self.registrationSelector.enabled = True
 
   def onReload(self,moduleName="Bronchoscopy"):
@@ -1144,6 +1175,11 @@ class BronchoscopyWidget:
 #######################################################################################################
     
   def onCreateROIFiducialsList(self):
+
+    self.createROIFiducialsButton.setStyleSheet("background-color: rgb(255,99,71)")
+    self.createLabelsFiducialsButton.setStyleSheet("background-color: rgb(255,255,255)")
+    self.createNewPathPointsButton.setStyleSheet("background-color: rgb(255,255,255)")
+
     self.alignViewers()
     self.fitSlicesToBackground()
     
@@ -1163,7 +1199,7 @@ class BronchoscopyWidget:
     displayNode.SetTextScale(1)
 
     markupLogic.SetActiveListID(markupsList)
-    self.pointsListSelector.setCurrentNode(markupsList)
+    #self.pointsListSelector.setCurrentNode(markupsList)
 
     appLogic = slicer.app.applicationLogic()
     selectionNode = appLogic.GetSelectionNode()
@@ -1258,6 +1294,8 @@ class BronchoscopyWidget:
         lastElement = activeList.GetNumberOfFiducials() - 1
         self.ROIsPoints.addItem(activeList.GetNthFiducialLabel(lastElement))
 
+    self.onPathCreationSelection()
+
   def showSelectedROI(self):
     fidIndex = self.ROIsPoints.currentIndex
     ROIsList = slicer.util.getNode('ROIFiducials')
@@ -1294,13 +1332,13 @@ class BronchoscopyWidget:
         displayNode.SetSelectedColor(1.0,1.0,0.0)
 
         AddedPathPointsList.AddFiducial(fidPosition[0],fidPosition[1],fidPosition[2])
-
-      markupLogic = slicer.modules.markups.logic()
-      markupLogic.SetActiveListID(markupsList)
-      self.labelPointsListSelector.setCurrentNode(markupsList)
     
   def onCreateLabelsFiducialsList(self):
-    
+
+    self.createLabelsFiducialsButton.setStyleSheet("background-color: rgb(255,99,71)")
+    self.createROIFiducialsButton.setStyleSheet("background-color: rgb(255,255,255)")
+    self.createNewPathPointsButton.setStyleSheet("background-color: rgb(255,255,255)")
+
     self.fitSlicesToBackground()
 
     LabelPointFiducialList = slicer.util.getNode('LabelsPoints')
@@ -1320,7 +1358,7 @@ class BronchoscopyWidget:
     fidDisplayNode.SetSelectedColor(0.0,1.0,1.0)
     
     markupLogic.SetActiveListID(markupsList)
-    self.labelPointsListSelector.setCurrentNode(markupsList)
+    #self.labelPointsListSelector.setCurrentNode(markupsList)
 
     appLogic = slicer.app.applicationLogic()
     selectionNode = appLogic.GetSelectionNode()
@@ -1348,6 +1386,10 @@ class BronchoscopyWidget:
     #self.updateGUI()
 
   def startAddingNewPathPoints(self):
+
+    self.createNewPathPointsButton.setStyleSheet("background-color: rgb(255,99,71)")
+    self.createROIFiducialsButton.setStyleSheet("background-color: rgb(255,255,255)")
+    self.createLabelsFiducialsButton.setStyleSheet("background-color: rgb(255,255,255)")
 
     self.fitSlicesToBackground()
     
@@ -1430,6 +1472,10 @@ class BronchoscopyWidget:
 
   def onPathCreationButton(self):
 
+    self.createROIFiducialsButton.setStyleSheet("background-color: rgb(255,255,255)")
+    self.createLabelsFiducialsButton.setStyleSheet("background-color: rgb(255,255,255)")
+    self.createNewPathPointsButton.setStyleSheet("background-color: rgb(255,255,255)")
+
     if len(self.pathModelNamesList) > 0:
       for n in xrange(len(self.pathModelNamesList)):
         name = self.pathModelNamesList[n]
@@ -1437,9 +1483,9 @@ class BronchoscopyWidget:
         slicer.mrmlScene.RemoveNode(model)
       self.pathModelNamesList = []
     
-    fiducials = slicer.util.getNode('LabelsPoints')
+    labelFiducials = slicer.util.getNode('LabelsPoints')
 
-    if fiducials:
+    if labelFiducials:
       self.disableButtonsAndSelectors()
 
       # Create Centerline Path   
@@ -1448,7 +1494,7 @@ class BronchoscopyWidget:
       pos = [0,0,0]
       targetPos = [0,0,0]
       for i in xrange(self.ROIsPoints.count):
-        fiducials.GetNthFiducialPosition(i,targetPos)
+        labelFiducials.GetNthFiducialPosition(i,targetPos)
         firstPath = self.pathComputation(self.inputSelector.currentNode(), targetPos)
         
         listName = 'AddedPathPointsList-' + str(i+1)
@@ -1474,8 +1520,15 @@ class BronchoscopyWidget:
             ndx = distance.argsort()
             orderedList = []
             for t in xrange(len(listOfFiducials)):
-              orderedList.append(listOfFiducials[ndx[t]])
-            
+              if t==0:
+                orderedList.append(listOfFiducials[ndx[t]])
+              if t > 0 and (distance[ndx[t]]-distance[ndx[t-1]]) >= 40: # ensure that fiducials are not too close to each other
+                orderedList.append(listOfFiducials[ndx[t]])
+
+            if len(orderedList) == 1:
+              print len(orderedList)
+              orderedList.append(listOfFiducials[0])
+
             computedPath = self.computeAddedPath(orderedList)
             secondPath = self.createAddedPath(computedPath)
 
@@ -1524,7 +1577,7 @@ class BronchoscopyWidget:
       
       self.pathCreated = 1
       
-      slicer.mrmlScene.RemoveNode(fiducials)
+      slicer.mrmlScene.RemoveNode(labelFiducials)
       ROINode = slicer.util.getNode('ROIFiducials')
 
       for i in xrange(ROINode.GetNumberOfFiducials()):
@@ -1535,10 +1588,6 @@ class BronchoscopyWidget:
       self.enableSelectors()
       self.onSelect()
 
-    else:
-      string = 'The selected path fiducial list contains ' + str(fiducials.GetNumberOfFiducials()) + ' fiducials. Number of fiducials in the list must be >= 1.'
-      raise Exception(string)
-   
     # Update GUI
     self.updateGUI()
     
@@ -1767,6 +1816,7 @@ class BronchoscopyWidget:
     return polyData
    
   def onPathSelect(self):
+    self.updateGUI()
     # Hide all paths and fiducials...
     if len(self.pathModelNamesList) > 0:
       for n in xrange(len(self.pathModelNamesList)):
@@ -1938,7 +1988,7 @@ class BronchoscopyWidget:
       
       ####################### Set clipping range for the first camera ####################
       camera = self.cameraForNavigation.GetCamera()
-      camera.SetClippingRange(0.7081381565016212, 708.1381565016211) # to be checked
+      camera.SetClippingRange(0.7081381565016212, 708.1381565016211) # set a random clipping range to force the camera to reset it 
 
       ########## Camera 2 is will automatically follow the probe ##########
       cameraNodes = slicer.mrmlScene.GetNodesByName('Default Scene Camera')
@@ -2107,63 +2157,6 @@ class BronchoscopyWidget:
     tMatrix.SetElement(2,0,abs(thirdRow[0])  * self.previousMatrixSigns[2,0])
     tMatrix.SetElement(2,1,abs(thirdRow[1])  * self.previousMatrixSigns[2,1]) 
 
-    '''if len(self.previousMatrixSigns) > 0:
-      changeSign = -1
-      if (newMatrixSigns != self.previousMatrixSigns).all():        
-        newMatrixSigns = newMatrixSigns * changeSign
-
-        tMatrix.SetElement(0,0,firstRow[0]  * changeSign)
-        tMatrix.SetElement(0,1,firstRow[1]  * changeSign)
-        tMatrix.SetElement(1,0,secondRow[0] * changeSign)
-        tMatrix.SetElement(1,1,secondRow[1] * changeSign)
-        tMatrix.SetElement(2,0,thirdRow[0]  * changeSign)
-        tMatrix.SetElement(2,1,thirdRow[1]  * changeSign)        
-      elif (newMatrixSigns[0][0] != self.previousMatrixSigns[0][0] and newMatrixSigns[0][1] != self.previousMatrixSigns[0][1] and
-            newMatrixSigns[1][1] != self.previousMatrixSigns[1][1] and newMatrixSigns[2][0] != self.previousMatrixSigns[2][0] and
-            newMatrixSigns[2][1] != self.previousMatrixSigns[2][1] and newMatrixSigns[1][0] == self.previousMatrixSigns[1][0]):
-        newMatrixSigns = newMatrixSigns * changeSign
-        newMatrixSigns[1][0] = newMatrixSigns[1][0] * changeSign
-        tMatrix.SetElement(0,0,firstRow[0]  * changeSign)
-        tMatrix.SetElement(0,1,firstRow[1]  * changeSign)
-        tMatrix.SetElement(1,1,secondRow[1] * changeSign)
-        tMatrix.SetElement(2,0,thirdRow[0]  * changeSign)
-        tMatrix.SetElement(2,1,thirdRow[1]  * changeSign)
-      elif (newMatrixSigns[0][0] == self.previousMatrixSigns[0][0] and newMatrixSigns[0][1] == self.previousMatrixSigns[0][1] and
-            newMatrixSigns[1][1] == self.previousMatrixSigns[1][1] and newMatrixSigns[2][0] == self.previousMatrixSigns[2][0] and
-            newMatrixSigns[2][1] == self.previousMatrixSigns[2][1] and newMatrixSigns[1][0] != self.previousMatrixSigns[1][0]):
-        newMatrixSigns[1][0] = newMatrixSigns[1][0] * changeSign
-        tMatrix.SetElement(1,0,secondRow[0]  * changeSign)
-      elif (newMatrixSigns[0][0] != self.previousMatrixSigns[0][0] and newMatrixSigns[0][1] != self.previousMatrixSigns[0][1] and
-            newMatrixSigns[1][1] != self.previousMatrixSigns[1][1] and newMatrixSigns[2][0] != self.previousMatrixSigns[2][0] and
-            newMatrixSigns[1][0] == self.previousMatrixSigns[1][0] and newMatrixSigns[2][1] == self.previousMatrixSigns[2][1]):
-        newMatrixSigns = newMatrixSigns * changeSign
-        newMatrixSigns[1][0] = newMatrixSigns[1][0] * changeSign
-        newMatrixSigns[2][1] = newMatrixSigns[2][1] * changeSign
-        tMatrix.SetElement(0,0,firstRow[0]  * changeSign)
-        tMatrix.SetElement(0,1,firstRow[1]  * changeSign)
-        tMatrix.SetElement(1,1,secondRow[1] * changeSign)
-        tMatrix.SetElement(2,0,thirdRow[0]  * changeSign)
-      elif (newMatrixSigns[0][0] == self.previousMatrixSigns[0][0] and newMatrixSigns[0][1] == self.previousMatrixSigns[0][1] and
-            newMatrixSigns[1][1] == self.previousMatrixSigns[1][1] and newMatrixSigns[2][0] == self.previousMatrixSigns[2][0] and
-            newMatrixSigns[1][0] != self.previousMatrixSigns[1][0] and newMatrixSigns[2][1] != self.previousMatrixSigns[2][1]):
-        newMatrixSigns[1][0] = newMatrixSigns[1][0] * changeSign
-        tMatrix.SetElement(1,0,secondRow[0]  * changeSign)
-        newMatrixSigns[2][1] = newMatrixSigns[2][1] * changeSign
-        tMatrix.SetElement(1,0,secondRow[0]  * changeSign)
-        tMatrix.SetElement(2,1,thirdRow[1]  * changeSign)
-      elif (newMatrixSigns[0][0] != self.previousMatrixSigns[0][0] and newMatrixSigns[0][1] != self.previousMatrixSigns[0][1] and
-            newMatrixSigns[1][1] != self.previousMatrixSigns[1][1] and newMatrixSigns[2][0] != self.previousMatrixSigns[2][0] and
-            newMatrixSigns[1][0] == self.previousMatrixSigns[1][0] and newMatrixSigns[2][1] == self.previousMatrixSigns[2][1]):
-        newMatrixSigns = newMatrixSigns * changeSign
-        newMatrixSigns[1][0] = newMatrixSigns[1][0] * changeSign
-        newMatrixSigns[2][1] = newMatrixSigns[2][1] * changeSign
-        tMatrix.SetElement(0,0,firstRow[0]  * changeSign)
-        tMatrix.SetElement(0,1,firstRow[1]  * changeSign)
-        tMatrix.SetElement(1,1,secondRow[1] * changeSign)
-        tMatrix.SetElement(2,0,thirdRow[0]  * changeSign)
-
-    self.previousMatrixSigns = newMatrixSigns'''
-
     ####################################################################################################################
     # Continuosly Update ViewUp Of The Camera To Always Have It On One Direction Orthogonal To The Locator's Long Axis #
     ####################################################################################################################
@@ -2200,7 +2193,8 @@ class BronchoscopyWidget:
     d=[0,0,0]
     #self.cameraForNavigation.SetFocalPoint(theorFP)
     self.cameraForNavigation.GetFocalPoint(d)
-    print "real new FP: ", d'''  
+    print "real new FP: ", d''' 
+
     if len(self.pathModelNamesList) > 0:
       pathModel = self.pathModelSelector.currentNode()
       pathPolyData = pathModel.GetPolyData()
