@@ -2123,7 +2123,7 @@ class BronchoscopyWidget:
     ##################################################
     ####### Compare rotation with previous one #######
     ##################################################
-    ISRotation = []
+    '''ISRotation = []
     
     firstRow  = [0.0,0.0]
     secondRow = [0.0,0.0]
@@ -2155,7 +2155,7 @@ class BronchoscopyWidget:
     tMatrix.SetElement(1,0,abs(secondRow[0]) * self.previousMatrixSigns[1,0])
     tMatrix.SetElement(1,1,abs(secondRow[1]) * self.previousMatrixSigns[1,1])
     tMatrix.SetElement(2,0,abs(thirdRow[0])  * self.previousMatrixSigns[2,0])
-    tMatrix.SetElement(2,1,abs(thirdRow[1])  * self.previousMatrixSigns[2,1]) 
+    tMatrix.SetElement(2,1,abs(thirdRow[1])  * self.previousMatrixSigns[2,1]) '''
 
     ####################################################################################################################
     # Continuosly Update ViewUp Of The Camera To Always Have It On One Direction Orthogonal To The Locator's Long Axis #
@@ -2179,7 +2179,7 @@ class BronchoscopyWidget:
     self.secondCamera.SetPosition(x,y+250,z)
 
     # force the camera position to be a bit higher to better watch the path
-    self.cameraForNavigation.SetPosition(x,y,z-1)
+    self.cameraForNavigation.SetPosition(x,y,z-2)
     camera=self.cameraForNavigation.GetCamera()
     '''p = camera.GetPosition()
     vpn = camera.GetViewPlaneNormal()
