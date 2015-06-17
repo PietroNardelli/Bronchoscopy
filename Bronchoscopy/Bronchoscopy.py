@@ -1306,6 +1306,7 @@ class BronchoscopyWidget:
       if activeList.GetNumberOfFiducials() > 0:
         lastElement = activeList.GetNumberOfFiducials() - 1
         self.ROIsPoints.addItem(activeList.GetNthFiducialLabel(lastElement))
+        self.ROIsPoints.setCurrentIndex(self.ROIsPoints.count-1)
 
     self.onPathCreationSelection()
 
@@ -1326,25 +1327,6 @@ class BronchoscopyWidget:
     yellowLogic.SetSliceOffset(fidPosition[0])
     greenLogic.SetSliceOffset(fidPosition[1])
     redLogic.SetSliceOffset(fidPosition[2])
-
-    if self.addNewPathPoints:
-      name = 'AddedPathPointsList-' + str(fidIndex+1)
-
-      AddedPathPointsList = slicer.util.getNode(name)
-
-      if AddedPathPointsList:
-        markupsList = AddedPathPointsList
-      else:
-        markupsList = slicer.vtkMRMLMarkupsFiducialNode()
-        markupsList.SetName(name)
-        slicer.mrmlScene.AddNode(markupsList)
-        AddedPathPointsList = slicer.util.getNode(name)
-        displayNode = AddedPathPointsList.GetDisplayNode()
-        displayNode.SetGlyphScale(3)
-        displayNode.SetTextScale(0)
-        displayNode.SetSelectedColor(1.0,1.0,0.0)
-
-        AddedPathPointsList.AddFiducial(fidPosition[0],fidPosition[1],fidPosition[2])
     
   def onCreateLabelsFiducialsList(self):
 
@@ -1413,7 +1395,45 @@ class BronchoscopyWidget:
     interactionNode = appLogic.GetInteractionNode()
     interactionNode.SwitchToPersistentPlaceMode()
 
-    self.showSelectedROI()
+    fidIndex = self.ROIsPoints.currentIndex
+    name = 'AddedPathPointsList-' + str(fidIndex+1)
+
+    AddedPathPointsList = slicer.util.getNode(name)
+
+    if AddedPathPointsList:
+      markupsList = AddedPathPointsList
+    else:
+      markupsList = slicer.vtkMRMLMarkupsFiducialNode()
+      markupsList.SetName(name)
+      slicer.mrmlScene.AddNode(markupsList)
+
+    AddedPathPointsList = slicer.util.getNode(name)
+    displayNode = AddedPathPointsList.GetDisplayNode()
+    displayNode.SetGlyphScale(3)
+    displayNode.SetTextScale(0)
+    displayNode.SetSelectedColor(1.0,1.0,0.0)
+
+    markupLogic = slicer.modules.markups.logic()
+    markupLogic.SetActiveListID(markupsList)
+    markupLogic.SetActiveListID(markupsList)
+
+    ROIsList = slicer.util.getNode('ROIFiducials')
+    fidPosition = [0,0,0]
+    ROIsList.GetNthFiducialPosition(fidIndex, fidPosition)
+
+    AddedPathPointsList.AddFiducial(fidPosition[0],fidPosition[1],fidPosition[2])
+
+    lm = slicer.app.layoutManager()
+    yellowWidget = lm.sliceWidget('Yellow')
+    yellowLogic = yellowWidget.sliceLogic()
+    greenWidget = lm.sliceWidget('Green')
+    greenLogic = greenWidget.sliceLogic()
+    redWidget = lm.sliceWidget('Red')
+    redLogic = redWidget.sliceLogic() 
+    
+    yellowLogic.SetSliceOffset(fidPosition[0])
+    greenLogic.SetSliceOffset(fidPosition[1])
+    redLogic.SetSliceOffset(fidPosition[2])
     
     #self.updateGUI()
   def onDefaultLayoutButton(self):
