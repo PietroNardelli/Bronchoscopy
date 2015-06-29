@@ -1559,7 +1559,7 @@ class BronchoscopyWidget:
                 orderedList.append(listOfFiducials[ndx[t]])
 
             if len(orderedList) == 1:
-              print len(orderedList)
+              #print len(orderedList)
               orderedList.append(listOfFiducials[0])
 
             computedPath = self.computeAddedPath(orderedList)
@@ -2007,9 +2007,9 @@ class BronchoscopyWidget:
       probeNode = slicer.util.getNode('ProbeModel')
       if probeNode:
         probeDisplayNode = probeNode.GetDisplayNode()
-        probeDisplayNode.SetColor(0, 0, 1)
+        probeDisplayNode.SetColor(0.9215686274509803, 0.03137254901960784, 1.0)
         probeDisplayNode.SetSliceIntersectionVisibility(1)
-        probeDisplayNode.SetSliceIntersectionThickness(4)
+        probeDisplayNode.SetSliceIntersectionThickness(7)
 
         ########## A fiducial is created to indicate the position of the probe in saggital, coronal and axial views ##########
 
@@ -2104,6 +2104,8 @@ class BronchoscopyWidget:
           transformMatrix = vtk.vtkMatrix4x4()
           self.probeToTrackerTransformNode.GetMatrixTransformToParent(transformMatrix)
 
+          #if self.probeCalibrationTransform.GetTransformNodeID() == None:
+            #self.probeCalibrationTransform.SetAndObserveTransformNodeID(self.centerlineCompensationTransform.GetID())
           if self.flipCompensationTransform.GetTransformNodeID() == None:
             self.flipCompensationTransform.SetAndObserveTransformNodeID(self.centerlineCompensationTransform.GetID())
 
@@ -2172,9 +2174,9 @@ class BronchoscopyWidget:
     self.centerlinePointsList = self.centerlinePointsList.tolist()
 
     ##################################################
-    ####### Compare rotation with previous one #######
+    ############ Keep rotation constant ##############
     ##################################################
-    '''ISRotation = []
+    ISRotation = []
     
     firstRow  = [0.0,0.0]
     secondRow = [0.0,0.0]
@@ -2206,7 +2208,7 @@ class BronchoscopyWidget:
     tMatrix.SetElement(1,0,abs(secondRow[0]) * self.previousMatrixSigns[1,0])
     tMatrix.SetElement(1,1,abs(secondRow[1]) * self.previousMatrixSigns[1,1])
     tMatrix.SetElement(2,0,abs(thirdRow[0])  * self.previousMatrixSigns[2,0])
-    tMatrix.SetElement(2,1,abs(thirdRow[1])  * self.previousMatrixSigns[2,1]) '''
+    tMatrix.SetElement(2,1,abs(thirdRow[1])  * self.previousMatrixSigns[2,1])
 
     ####################################################################################################################
     # Continuosly Update ViewUp Of The Camera To Always Have It On One Direction Orthogonal To The Locator's Long Axis #
@@ -2230,7 +2232,7 @@ class BronchoscopyWidget:
     self.secondCamera.SetPosition(x,y+250,z)
 
     # force the camera position to be a bit higher to better watch the path
-    self.cameraForNavigation.SetPosition(x,y,z-2)
+    self.cameraForNavigation.SetPosition(x,y,z-1)
     camera=self.cameraForNavigation.GetCamera()
     '''p = camera.GetPosition()
     vpn = camera.GetViewPlaneNormal()
