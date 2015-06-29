@@ -1877,20 +1877,15 @@ class BronchoscopyWidget:
       pathPolydata = pathModel.GetPolyData()
       pathPoints = pathPolydata.GetPoints()
       for j in xrange(pathPoints.GetNumberOfPoints()):
-        self.centerlinePointsList.append(pathPoints.GetPoint(j))
-
-    ###### Create a list of points from the vtkPoints object ############
-    if self.centerlinePointsList != []:
-
-      for i in xrange(len(self.centerlinePointsList)):
-        point = self.centerlinePointsList[i]
+        point = pathPoints.GetPoint(j)
         p = [point[0],point[1],point[2]]
-        self.centerlinePointsList.append(p)
+        self.centerlinePointsList.append(point)
 
       # Avoid repetition of the same point twice
       self.centerlinePointsList = numpy.array([list(x) for x in set(tuple(x) for x in self.centerlinePointsList)])
-      print len(self.centerlinePointsList)
       self.centerlinePointsList = self.centerlinePointsList.tolist()
+
+    print self.centerlinePointsList      
 
     # Display fiducial corresponding to the selected path
     name = pathModel.GetName()
