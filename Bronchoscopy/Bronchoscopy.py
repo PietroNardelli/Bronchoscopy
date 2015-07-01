@@ -49,6 +49,15 @@ class BronchoscopyWidget:
     self.cameraNodeObserverTag = None
     self.cameraObserverTag = None
 
+    self.centerlinePointsList = []
+    self.centerline = None
+    self.fiducialNode = None
+    self.uploadedCenterlineModel = None
+
+    self.pathCreated = 0
+
+    self.pathModelNamesList = []
+
     #
     # Sensor Tracking Variables
     #
@@ -63,13 +72,6 @@ class BronchoscopyWidget:
     self.checkStreamingTimer = qt.QTimer()
     self.checkStreamingTimer.setInterval(5)
     self.checkStreamingTimer.connect('timeout()', self.showVideoStreaming)
-
-    self.centerlinePointsList = []
-    self.fiducialNode = None
-
-    self.pathCreated = 0
-
-    self.pathModelNamesList = []
 
     self.previousMatrixSigns = []
     
@@ -196,72 +198,6 @@ class BronchoscopyWidget:
     reloadFormLayout.addWidget(self.reloadButton)
     self.reloadButton.connect('clicked()', self.onReload)
 
-    # Instantiate and connect widgets ...
-
-    ###################################################################################
-    ##########################  Fiducial Registration Area ############################
-    ###################################################################################
-
-    registrationCollapsibleButton = ctk.ctkCollapsibleButton()
-    registrationCollapsibleButton.text = "Fiducial Registration Area"
-    self.layout.addWidget(registrationCollapsibleButton)
-    self.layout.setSpacing(20)
-    # Layout within the dummy collapsible button
-    registrationFormLayout = qt.QFormLayout(registrationCollapsibleButton)
-
-    regBox = qt.QHBoxLayout()
-    registrationFormLayout.addRow(regBox)
-    
-    self.registrationSelector = slicer.qMRMLNodeComboBox()
-    self.registrationSelector.nodeTypes = ( ("vtkMRMLMarkupsFiducialNode"), "" )
-    self.registrationSelector.selectNodeUponCreation = True
-    self.registrationSelector.addEnabled = False
-    self.registrationSelector.baseName = 'RegistrationPoints'
-    self.registrationSelector.removeEnabled = True
-    self.registrationSelector.noneEnabled = True
-    self.registrationSelector.showHidden = False
-    self.registrationSelector.showChildNodeTypes = False
-    self.registrationSelector.setMRMLScene( slicer.mrmlScene )
-    self.registrationSelector.setToolTip( "Select registration fiducial points" )
-    self.registrationSelector.setFixedWidth(200)
-    #registrationFormLayout.addRow("Registration Fiducials List: ", self.registrationSelector)
-
-    self.createRegistrationFiducialsButton = qt.QPushButton("Create Registration Points List")
-    self.createRegistrationFiducialsButton.toolTip = "Create fiducial list for the registration."
-    self.createRegistrationFiducialsButton.setFixedSize(200,35)
-    self.createRegistrationFiducialsButton.setStyleSheet("background-color: rgb(255,246,142)")
-
-    regBox.addWidget(self.registrationSelector)
-    regBox.addWidget(self.createRegistrationFiducialsButton)
-
-    self.folderPathSelection = qt.QLineEdit()
-    self.folderPathSelection.setReadOnly(True)
-    self.folderPathSelection.setFixedWidth(200)
-
-    selectionBox = qt.QHBoxLayout()
-    registrationFormLayout.addRow(selectionBox)
-
-    self.selectFolderButton = qt.QPushButton("Select Folder")
-    self.selectFolderButton.toolTip = "Select folder where to save the txt file containing the fiducial points."
-    self.selectFolderButton.setFixedSize(200,35)
-    self.selectFolderButton.setStyleSheet("background-color: rgb(255,246,142)")
-
-    selectionBox.addWidget(self.folderPathSelection)
-    selectionBox.addWidget(self.selectFolderButton)
-
-    self.RegFidListButton = qt.QPushButton("Save Registration Points")
-    self.RegFidListButton.toolTip = "Create a list of fiducial points starting from the extracted centerline of the 3D model."
-    self.RegFidListButton.setFixedSize(150,45)
-
-    if( self.registrationSelector.currentNode() and self.folderPathSelection.text):
-      self.RegFidListButton.enabled = True
-    else:
-      self.RegFidListButton.enabled = False
-
-    registrationBox = qt.QVBoxLayout()
-    registrationFormLayout.addRow(registrationBox)
-    registrationBox.addWidget(self.RegFidListButton,0,4)
-
     #
     # Parameters Area
     #
@@ -320,7 +256,7 @@ class BronchoscopyWidget:
     boxLayout = qt.QVBoxLayout()
 
     self.fiducialsCollapsibleButton = ctk.ctkCollapsibleButton()
-    self.fiducialsCollapsibleButton.text = "Centerline Fiducials List"
+    self.fiducialsCollapsibleButton.text = "Centerline Fiducials List/ Centerline Model"
     self.fiducialsCollapsibleButton.setChecked(False)
     self.fiducialsCollapsibleButton.setFixedSize(400,100)
     self.fiducialsCollapsibleButton.enabled = True
@@ -336,16 +272,28 @@ class BronchoscopyWidget:
     self.fiducialListSelector.showHidden = False
     self.fiducialListSelector.showChildNodeTypes = False
     self.fiducialListSelector.setMRMLScene( slicer.mrmlScene )
-    self.fiducialListSelector.setToolTip( "Select centerline fiducial list already uploaded" )
+    self.fiducialListSelector.setToolTip( "Select uploaded centerline fiducial list" )
     fiducialFormLayout.addRow("Centerline Fiducials List: ", self.fiducialListSelector)
- 
+
+    self.centerlineModelSelector = slicer.qMRMLNodeComboBox()
+    self.centerlineModelSelector.nodeTypes = ( ("vtkMRMLModelNode"), "" )
+    self.centerlineModelSelector.selectNodeUponCreation = True
+    self.centerlineModelSelector.addEnabled = False
+    self.centerlineModelSelector.removeEnabled = True
+    self.centerlineModelSelector.noneEnabled = True
+    self.centerlineModelSelector.showHidden = False
+    self.centerlineModelSelector.showChildNodeTypes = False
+    self.centerlineModelSelector.setMRMLScene( slicer.mrmlScene )
+    self.centerlineModelSelector.setToolTip( "Select uploaded centerline model" )
+    fiducialFormLayout.addRow("Centerline Model: ", self.centerlineModelSelector)
+
     ########################################################################################################
     #### Optional Push Button To Create A List Of Fiducial Starting From The Extracted Centerline Points ###
     ########################################################################################################
 
-    self.CreateFiducialListButton = qt.QPushButton("Create Fiducial List From Centerline")
+    self.CreateFiducialListButton = qt.QPushButton("Create and Save a Fiducial List From Centerline")
     self.CreateFiducialListButton.toolTip = "Create a list of fiducial points starting from the extracted cenetrline bof the 3D model."
-    self.CreateFiducialListButton.setFixedSize(240,25)
+    self.CreateFiducialListButton.setFixedSize(250,25)
 
     if self.centerlinePointsList != []:
       self.CreateFiducialListButton.enabled = True
@@ -381,21 +329,6 @@ class BronchoscopyWidget:
     pathCreationFormLayout = qt.QFormLayout(self.pathCreationCollapsibleButton)
 
     # Button To Create A Fiducial List Containing All The Points On The ROIs
-
-    '''self.pointsListSelector = slicer.qMRMLNodeComboBox()
-    self.pointsListSelector.nodeTypes = ( ("vtkMRMLMarkupsFiducialNode"), "" )
-    self.pointsListSelector.selectNodeUponCreation = True
-    self.pointsListSelector.addEnabled = True
-    self.pointsListSelector.baseName = 'PathFiducials'
-    self.pointsListSelector.removeEnabled = True
-    self.pointsListSelector.noneEnabled = True
-    self.pointsListSelector.showHidden = False
-    self.pointsListSelector.showChildNodeTypes = False
-    self.pointsListSelector.setMRMLScene( slicer.mrmlScene )
-    self.pointsListSelector.setToolTip( "Select points indicating ROIs to reach." )
-    self.pointsListSelector.setFixedWidth(180)
-    pathCreationFormLayout.addRow("ROI(s) Points List: ", self.pointsListSelector)'''
-
     self.createROIFiducialsButton = qt.QPushButton("Add New ROI Point(s)")
     self.createROIFiducialsButton.toolTip = "Add new ROI point(s)."
     self.createROIFiducialsButton.setFixedSize(160,35)
@@ -407,30 +340,10 @@ class BronchoscopyWidget:
     pointsButtonsBox.addWidget(self.createROIFiducialsButton, 0, 4)
 
     # Button To Create A Fiducial List Containing The Points On The Labels Closest To The ROIs
-
-    '''self.labelPointsListSelector = slicer.qMRMLNodeComboBox()
-    self.labelPointsListSelector.nodeTypes = ( ("vtkMRMLMarkupsFiducialNode"), "" )
-    self.labelPointsListSelector.selectNodeUponCreation = True
-    self.labelPointsListSelector.addEnabled = True
-    self.labelPointsListSelector.baseName = 'LabelFiducials'
-    self.labelPointsListSelector.removeEnabled = True
-    self.labelPointsListSelector.noneEnabled = True
-    self.labelPointsListSelector.showHidden = False
-    self.labelPointsListSelector.showChildNodeTypes = False
-    self.labelPointsListSelector.setMRMLScene( slicer.mrmlScene )
-    self.labelPointsListSelector.setToolTip( "Select points on the label closest to the ROI." )
-    self.labelPointsListSelector.setFixedWidth(180)
-    pathCreationFormLayout.addRow("Label(s) Points List: ", self.labelPointsListSelector)'''
-
     self.createLabelsFiducialsButton = qt.QPushButton("Add New Label Point(s)")
     self.createLabelsFiducialsButton.toolTip = "Add point(s) on the closest labels to the ROIs."
     self.createLabelsFiducialsButton.setFixedSize(160,35)
     self.createLabelsFiducialsButton.enabled = False
-
-    #labelsBox = qt.QHBoxLayout()
-    #pathCreationFormLayout.addRow(labelsBox)
-
-    #labelsBox.addWidget(self.labelPointsListSelector, 0, 4)
     pointsButtonsBox.addWidget(self.createLabelsFiducialsButton, 0, 4)
 
     # Combobox listing all the ROIs points
@@ -557,6 +470,70 @@ class BronchoscopyWidget:
     pathInfoFormLayout.addRow("Path Length:", self.pathLength)
     pathInfoFormLayout.addRow("Distance To Target: ", self.distanceToTarget)
 
+    ###################################################################################
+    ##########################  Fiducial Registration Area ############################
+    ###################################################################################
+
+    registrationCollapsibleButton = ctk.ctkCollapsibleButton()
+    registrationCollapsibleButton.text = "Fiducial Registration Area"
+    self.layout.addWidget(registrationCollapsibleButton)
+    self.layout.setSpacing(20)
+    # Layout within the dummy collapsible button
+    registrationFormLayout = qt.QFormLayout(registrationCollapsibleButton)
+
+    regBox = qt.QHBoxLayout()
+    registrationFormLayout.addRow(regBox)
+    
+    self.registrationSelector = slicer.qMRMLNodeComboBox()
+    self.registrationSelector.nodeTypes = ( ("vtkMRMLMarkupsFiducialNode"), "" )
+    self.registrationSelector.selectNodeUponCreation = True
+    self.registrationSelector.addEnabled = False
+    self.registrationSelector.baseName = 'RegistrationPoints'
+    self.registrationSelector.removeEnabled = True
+    self.registrationSelector.noneEnabled = True
+    self.registrationSelector.showHidden = False
+    self.registrationSelector.showChildNodeTypes = False
+    self.registrationSelector.setMRMLScene( slicer.mrmlScene )
+    self.registrationSelector.setToolTip( "Select registration fiducial points" )
+    self.registrationSelector.setFixedWidth(200)
+    #registrationFormLayout.addRow("Registration Fiducials List: ", self.registrationSelector)
+
+    self.createRegistrationFiducialsButton = qt.QPushButton("Add Registration Point(s)")
+    self.createRegistrationFiducialsButton.toolTip = "Create fiducial list for the registration."
+    self.createRegistrationFiducialsButton.setFixedSize(200,35)
+    self.createRegistrationFiducialsButton.setStyleSheet("background-color: rgb(255,246,142)")
+
+    regBox.addWidget(self.registrationSelector)
+    regBox.addWidget(self.createRegistrationFiducialsButton)
+
+    self.folderPathSelection = qt.QLineEdit()
+    self.folderPathSelection.setReadOnly(True)
+    self.folderPathSelection.setFixedWidth(200)
+
+    selectionBox = qt.QHBoxLayout()
+    registrationFormLayout.addRow(selectionBox)
+
+    self.selectFolderButton = qt.QPushButton("Select Folder")
+    self.selectFolderButton.toolTip = "Select folder where to save the txt file containing the fiducial points."
+    self.selectFolderButton.setFixedSize(200,35)
+    self.selectFolderButton.setStyleSheet("background-color: rgb(255,246,142)")
+
+    selectionBox.addWidget(self.folderPathSelection)
+    selectionBox.addWidget(self.selectFolderButton)
+
+    self.RegFidListButton = qt.QPushButton("Save Registration Points")
+    self.RegFidListButton.toolTip = "Create a list of fiducial points starting from the extracted centerline of the 3D model."
+    self.RegFidListButton.setFixedSize(150,45)
+
+    if( self.registrationSelector.currentNode() and self.folderPathSelection.text):
+      self.RegFidListButton.enabled = True
+    else:
+      self.RegFidListButton.enabled = False
+
+    registrationBox = qt.QVBoxLayout()
+    registrationFormLayout.addRow(registrationBox)
+    registrationBox.addWidget(self.RegFidListButton,0,4)
+
     #############################################################################################
     ###########################  Sensor Tracker Collapsible Button  #############################
     #############################################################################################
@@ -583,10 +560,10 @@ class BronchoscopyWidget:
     trackerFormLayout.addRow(trackerButtonLayout)
 
     # Enable ProbeTracKButton
-    if self.fiducialListSelector.currentNode() or self.centerlinePointsList != []:
-        self.ProbeTrackButton.enabled = True
+    if self.centerlinePointsList != []:
+      self.ProbeTrackButton.enabled = True
     else:
-        self.ProbeTrackButton.enabled = False
+      self.ProbeTrackButton.enabled = False
 
     ############################################################################################
     ##################################  Flip Image Button  #####################################
@@ -604,30 +581,6 @@ class BronchoscopyWidget:
 
     trackerFormLayout.addRow(flippingBox)
 
-    ########################################################################################
-    ################################ Image Registration ####################################
-    ########################################################################################
-    imgRegCollapsibleButton = ctk.ctkCollapsibleButton()
-    imgRegCollapsibleButton.text = "Image Registration Section"
-    self.layout.addWidget(imgRegCollapsibleButton)
-    self.layout.setSpacing(20)
-    imgRegFormLayout = qt.QFormLayout(imgRegCollapsibleButton)
-
-    #realImgSelectionBox = qt.QHBoxLayout()
-    #imgRegFormLayout.addRow(realImgSelectionBox)
-
-    self.ImageRegistrationButton = qt.QPushButton("Start Image Registration")
-    self.ImageRegistrationButton.toolTip = "Start registration between real and virtual images."
-    self.ImageRegistrationButton.setFixedSize(250,50)
-    self.ImageRegistrationButton.enabled = True
-    self.ImageRegistrationButton.checkable = True
-    
-    imgRegButtonBox = qt.QVBoxLayout()
-    imgRegFormLayout.addRow(imgRegButtonBox)
-
-    imgRegButtonBox.addWidget(self.ImageRegistrationButton, 0, 4)
-
-
     #####################################################################################
     ################################ Video Streaming ####################################
     #####################################################################################
@@ -642,7 +595,7 @@ class BronchoscopyWidget:
 
     self.VideoRegistrationButton = qt.QPushButton("Start Video Streaming")
     self.VideoRegistrationButton.toolTip = "Stream the real video within the lung"
-    self.VideoRegistrationButton.setFixedSize(250,50)
+    self.VideoRegistrationButton.setFixedSize(270,50)
     self.VideoRegistrationButton.enabled = True
     self.VideoRegistrationButton.checkable = True
     
@@ -650,6 +603,18 @@ class BronchoscopyWidget:
     videoStreamingFormLayout.addRow(VSButtonBox)
 
     VSButtonBox.addWidget(self.VideoRegistrationButton, 0, 4)
+
+    ########################################################################################
+    ################################ Image Registration ####################################
+    ########################################################################################
+    self.ImageRegistrationButton = qt.QPushButton("Start Image Registration")
+    self.ImageRegistrationButton.toolTip = "Start registration between real and virtual images."
+    self.ImageRegistrationButton.setFixedSize(200,40)
+    self.ImageRegistrationButton.enabled = True
+    self.ImageRegistrationButton.checkable = True
+    self.ImageRegistrationButton.hide()
+    
+    VSButtonBox.addWidget(self.ImageRegistrationButton, 0, 4)
 
     ########################################################################################
     ################################ Create Connections ####################################
@@ -664,6 +629,7 @@ class BronchoscopyWidget:
     self.labelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.ExtractCenterlineButton.connect('clicked(bool)', self.onExtractCenterlineButton)
     self.fiducialListSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
+    self.centerlineModelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.CreateFiducialListButton.connect('clicked(bool)',self.onCreateAndSaveFiducialList)
 
     #self.pointsListSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
@@ -715,11 +681,6 @@ class BronchoscopyWidget:
   def onSelect(self):
     self.updateGUI()
 
-    if self.registrationSelector.currentNode() and self.folderPathSelection.text:
-      self.RegFidListButton.enabled = True
-    else:
-      self.RegFidListButton.enabled = False
-
     if self.inputSelector.currentNode() and self.labelSelector.currentNode():
       inputVolume = self.inputSelector.currentNode()
       modelDisplayNode = inputVolume.GetDisplayNode()
@@ -730,7 +691,7 @@ class BronchoscopyWidget:
       self.ExtractCenterlineButton.enabled = True
       self.ExtractCenterlineButton.setStyleSheet("background-color: rgb(175,255,253)")
    
-      if self.fiducialListSelector.currentNode() or self.centerlinePointsList != []:
+      if self.centerlinePointsList != []:
         self.ProbeTrackButton.enabled = True
       else:
         self.ProbeTrackButton.enabled = False
@@ -745,8 +706,17 @@ class BronchoscopyWidget:
       self.FlipImageButton.enabled = False
       #self.ImageRegistrationButton.enabled = False
 
-    if self.ROIsPoints.currentIndex >= 0:
- 
+    if self.registrationSelector.currentNode() and self.folderPathSelection.text:
+
+      self.RegFidListButton.enabled = True
+    else:
+      self.RegFidListButton.enabled = False
+
+    ROIfids = slicer.util.getNode('ROIFiducials')
+    if self.ROIsPoints.currentIndex == -1 and ROIfids:
+      self.fillComboBox(ROIfids)
+
+    if self.ROIsPoints.currentIndex >= 0: 
       self.createLabelsFiducialsButton.enabled = True
       self.createNewPathPointsButton.enabled = True
 
@@ -764,6 +734,12 @@ class BronchoscopyWidget:
 
     if self.centerlinePointsList != []:
       self.CreateFiducialListButton.enabled = True
+
+  def fillComboBox(self, ROIfiducials):
+    if ROIfiducials.GetNumberOfFiducials() > 0:
+      for i in xrange(ROIfiducials.GetNumberOfFiducials()):
+        self.ROIsPoints.addItem(ROIfiducials.GetNthFiducialLabel(i))
+        self.ROIsPoints.setCurrentIndex(self.ROIsPoints.count-1)
 
   def onPathCreationSelection(self):
 
@@ -802,6 +778,7 @@ class BronchoscopyWidget:
     self.inputSelector.enabled = False
     self.labelSelector.enabled = False
     self.fiducialListSelector.enabled = False
+    self.centerlineModelSelector.enabled = False
     #self.pointsListSelector.enabled = False
     self.registrationSelector.enabled = False
 
@@ -811,12 +788,12 @@ class BronchoscopyWidget:
     self.selectFolderButton.setStyleSheet("background-color: rgb(255,246,142)")
 
     self.createRegistrationFiducialsButton.enabled = True
-    self.createRegistrationFiducialsButton.setStyleSheet("background-color: rgb(255,246,142)")
+    #self.createRegistrationFiducialsButton.setStyleSheet("background-color: rgb(255,246,142)")
 
     self.inputSelector.enabled = True
     self.labelSelector.enabled = True
     self.fiducialListSelector.enabled = True
-    #self.pointsListSelector.enabled = True
+    self.centerlineModelSelector.enabled = True
     self.registrationSelector.enabled = True
 
   def onReload(self,moduleName="Bronchoscopy"):
@@ -874,20 +851,37 @@ class BronchoscopyWidget:
 
   def onCreateRegFidList(self):
 
+    appLogic = slicer.app.applicationLogic()
+    selectionNode = appLogic.GetSelectionNode()
+    selectionNode.SetReferenceActivePlaceNodeClassName("vtkMRMLMarkupsFiducialNode")
+    interactionNode = appLogic.GetInteractionNode()
+    interactionNode.Reset()
+
+    self.createRegistrationFiducialsButton.setStyleSheet("background-color: rgb(255,99,71)")
+    self.createROIFiducialsButton.setStyleSheet("background-color: rgb(255,255,255)")
+    self.createLabelsFiducialsButton.setStyleSheet("background-color: rgb(255,255,255)")
+    self.createNewPathPointsButton.setStyleSheet("background-color: rgb(255,255,255)")
+
     self.disableButtonsAndSelectors()
-    markupsList = slicer.vtkMRMLMarkupsFiducialNode()
-    markupsList.SetName('RegistrationPoints')
-    slicer.mrmlScene.AddNode(markupsList)
+    markupsList = slicer.util.getNode('RegistrationMarker')
+    if markupsList == None:
+      markupsList = slicer.vtkMRMLMarkupsFiducialNode()
+      markupsList.SetName('RegistrationMarker')
+      slicer.mrmlScene.AddNode(markupsList)
+    
     displayNode = markupsList.GetDisplayNode()
     displayNode.SetSelectedColor(0.0,0.0,1.0)
 
     self.registrationSelector.setCurrentNodeID(markupsList.GetID())
+    markupLogic = slicer.modules.markups.logic()
+    markupLogic.SetActiveListID(markupsList)   
 
     self.enableSelectors()
     self.onSelect()
 
   def onSaveRegistrationPoints(self):
     
+    self.createRegistrationFiducialsButton.setStyleSheet("background-color: rgb(255,255,255)")
     self.disableButtonsAndSelectors()
    
     regFidListNode = self.registrationSelector.currentNode()
@@ -898,7 +892,7 @@ class BronchoscopyWidget:
       p = [point[0],point[1],point[2]]
       pointsList.append(p)
 
-    localDirectory = self.folderPathSelection.text + "/RegistrationPoints.csv"
+    localDirectory = self.folderPathSelection.text + "/RegistrationMarkers.csv"
 
     with open(localDirectory, "wb") as f:
       writer = csv.writer(f, delimiter=' ')
@@ -948,11 +942,12 @@ class BronchoscopyWidget:
 
   def extractCenterline(self,labelVolume):
 
-    if self.fiducialListSelector.currentNode():  # if a fiducial list was already uploaded, all that follows is not necessary!
+    if self.fiducialListSelector.currentNode():  # if a centerline fiducial list was uploaded, all that follows is not necessary!
       self.fiducialNode = self.fiducialListSelector.currentNode()
+    elif self.centerlineModelSelector.currentNode():
+      self.uploadedCenterlineModel = self.centerlineModelSelector.currentNode()
     else:
       self.centerline = slicer.vtkMRMLScalarVolumeNode()
-      #self.centerline.addAttribute( "vtkMRMLScalarVolumeNode", "LabelMap", 1 )
       slicer.mrmlScene.AddNode( self.centerline )
 
       centerlineExtraction = slicer.modules.centerlineextractioncli
@@ -992,9 +987,7 @@ class BronchoscopyWidget:
       centerlinePolydata = self.centerlineModel.GetPolyData()
 
       iterations = 3
-      self.Smoothing(centerlinePolydata, self.points, iterations)
-
-    self.ProbeTrackButton.enabled = True
+      self.Smoothing(centerlinePolydata, iterations)
 
     if self.fiducialNode:
       disNode = self.fiducialNode.GetDisplayNode()
@@ -1003,18 +996,31 @@ class BronchoscopyWidget:
         point = [0,0,0]
         self.fiducialNode.GetNthFiducialPosition(i,point)
         self.centerlinePointsList.append(point)
+      slicer.mrmlScene.RemoveNode(self.fiducialNode)
+    elif self.uploadedCenterlineModel:
+      displayNode = self.uploadedCenterlineModel.GetDisplayNode()
+      displayNode.SetVisibility(0)
+      centerlinePolydata = self.uploadedCenterlineModel.GetPolyData()
+      iterations = 3
+      self.Smoothing(centerlinePolydata, iterations)
+      slicer.mrmlScene.RemoveNode(self.uploadedCenterlineModel)
 
-    slicer.mrmlScene.RemoveNode(self.fiducialListSelector.currentNode())
+    self.ProbeTrackButton.enabled = True
+    
+    if self.centerline != None:
+      slicer.mrmlScene.RemoveNode(self.centerline)
 
     return True
 
-  def Smoothing(self, centModel, modelPoints, iterationsNumber):
+  def Smoothing(self, centModel, iterationsNumber):
     
     NumberOfCells = centModel.GetNumberOfCells()
+    print centModel.GetNumberOfPoints()
 
     pointsList = []
     distancePointsAbove = []
     distancePointsBelow = []
+    modelPoints = vtk.vtkPoints()
 
     for iteration in range(0, iterationsNumber):
       if iteration == 0:
@@ -1149,6 +1155,13 @@ class BronchoscopyWidget:
         else:
           modelPoints.InsertPoint(n, actualPoint)
 
+    print modelPoints.GetNumberOfPoints()
+    for i in range(0,modelPoints.GetNumberOfPoints()):
+      modelPoints.GetPoint(i,point)
+      p = [point[0],point[1],point[2]]
+      self.centerlinePointsList.append(p)
+    print len(self.centerlinePointsList)
+
 ########################################################################################################
 ######################## Create A Fiducial List With A Fiducial On Each Point ##########################  
 ########################################################################################################
@@ -1166,9 +1179,10 @@ class BronchoscopyWidget:
       line = [ID,point[0],point[1],point[2],0,0,0,1,1,1,0,associatedNodeID,'','']
       fiducialList.append(line)
 
-    localDirectory = "C:/Users/Lab/Desktop/CenterlineFiducials.fcsv"
+    localDirectory = qt.QFileDialog.getExistingDirectory()
+    fileName = localDirectory + '/CenterlineFiducials.fcsv'
     a =[]
-    with open(localDirectory, "wb") as f:
+    with open(fileName, "wb") as f:
       writer = csv.writer(f,)
       version = slicer.app.applicationVersion
       firstRow = '# Markups fiducial file version = ' + str(version[0:3])
@@ -1192,6 +1206,7 @@ class BronchoscopyWidget:
     self.createROIFiducialsButton.setStyleSheet("background-color: rgb(255,99,71)")
     self.createLabelsFiducialsButton.setStyleSheet("background-color: rgb(255,255,255)")
     self.createNewPathPointsButton.setStyleSheet("background-color: rgb(255,255,255)")
+    self.createRegistrationFiducialsButton.setStyleSheet("background-color: rgb(255,255,255)")
 
     self.alignViewers()
     self.fitSlicesToBackground()
@@ -1208,8 +1223,8 @@ class BronchoscopyWidget:
 
     ROIFiducialList = slicer.util.getNode('ROIFiducials')
     displayNode = ROIFiducialList.GetDisplayNode()
-    displayNode.SetGlyphScale(6)
-    displayNode.SetTextScale(1)
+    displayNode.SetGlyphScale(5)
+    displayNode.SetTextScale(3)
 
     markupLogic.SetActiveListID(markupsList)
     #self.pointsListSelector.setCurrentNode(markupsList)
@@ -1220,7 +1235,6 @@ class BronchoscopyWidget:
     interactionNode = appLogic.GetInteractionNode()
     interactionNode.SwitchToPersistentPlaceMode()
 
-    #self.updateGUI()
     self.addFiducialObservers()
 
   def alignViewers(self):
@@ -1292,9 +1306,11 @@ class BronchoscopyWidget:
       return
     
     self.updatingFiducials = True
-    self.updateComboBox()
     self.pendingUpdate = False
     self.updatingFiducials = False
+    fiducialList = slicer.util.getNode('ROIFiducials')
+    if fiducialList:
+      self.updateComboBox()
 
   def updateComboBox(self):
     '''Update the ROIs combobox'''
@@ -1302,7 +1318,7 @@ class BronchoscopyWidget:
     activeListID = fiducialsLogic.GetActiveListID()
     activeList = slicer.util.getNode(activeListID)
 
-    if activeList:
+    if activeList and activeList.GetName() == 'ROIFiducials':
       if activeList.GetNumberOfFiducials() > 0:
         lastElement = activeList.GetNumberOfFiducials() - 1
         self.ROIsPoints.addItem(activeList.GetNthFiducialLabel(lastElement))
@@ -1333,20 +1349,21 @@ class BronchoscopyWidget:
     self.createLabelsFiducialsButton.setStyleSheet("background-color: rgb(255,99,71)")
     self.createROIFiducialsButton.setStyleSheet("background-color: rgb(255,255,255)")
     self.createNewPathPointsButton.setStyleSheet("background-color: rgb(255,255,255)")
+    self.createRegistrationFiducialsButton.setStyleSheet("background-color: rgb(255,255,255)")
 
     self.fitSlicesToBackground()
 
-    LabelPointFiducialList = slicer.util.getNode('LabelsPoints')
+    LabelPointFiducialList = slicer.util.getNode('LabelPoints')
     markupLogic = slicer.modules.markups.logic()
 
     if LabelPointFiducialList:
       markupsList = LabelPointFiducialList
     else:
       markupsList = slicer.vtkMRMLMarkupsFiducialNode()
-      markupsList.SetName('LabelsPoints')
+      markupsList.SetName('LabelPoints')
       slicer.mrmlScene.AddNode(markupsList)
 
-    fidNode =  slicer.util.getNode('LabelsPoints')
+    fidNode =  slicer.util.getNode('LabelPoints')
     fidDisplayNode = fidNode.GetDisplayNode()
     fidDisplayNode.SetGlyphScale(3)
     fidDisplayNode.SetTextScale(0)
@@ -1385,6 +1402,7 @@ class BronchoscopyWidget:
     self.createNewPathPointsButton.setStyleSheet("background-color: rgb(255,99,71)")
     self.createROIFiducialsButton.setStyleSheet("background-color: rgb(255,255,255)")
     self.createLabelsFiducialsButton.setStyleSheet("background-color: rgb(255,255,255)")
+    self.createRegistrationFiducialsButton.setStyleSheet("background-color: rgb(255,255,255)")
 
     self.fitSlicesToBackground()
     
@@ -1487,7 +1505,6 @@ class BronchoscopyWidget:
 
       yellowLogic.SetSliceOffset(fidPosition[0])
 
-
   def onGreenViewButton(self):
     self.fitSlicesToBackground()
     self.layoutManager.setLayout(8)
@@ -1516,7 +1533,7 @@ class BronchoscopyWidget:
         slicer.mrmlScene.RemoveNode(model)
       self.pathModelNamesList = []
     
-    labelFiducials = slicer.util.getNode('LabelsPoints')
+    labelFiducials = slicer.util.getNode('LabelPoints')
 
     if labelFiducials:
       self.disableButtonsAndSelectors()
@@ -1559,7 +1576,6 @@ class BronchoscopyWidget:
                 orderedList.append(listOfFiducials[ndx[t]])
 
             if len(orderedList) == 1:
-              #print len(orderedList)
               orderedList.append(listOfFiducials[0])
 
             computedPath = self.computeAddedPath(orderedList)
@@ -1610,13 +1626,16 @@ class BronchoscopyWidget:
       
       self.pathCreated = 1
       
-      slicer.mrmlScene.RemoveNode(labelFiducials)
+      #slicer.mrmlScene.RemoveNode(labelFiducials)
+      labelFiducials.SetDisplayVisibility(0)
       ROINode = slicer.util.getNode('ROIFiducials')
 
       for i in xrange(ROINode.GetNumberOfFiducials()):
         name = 'AddedPathPointsList-'+str(i+1)
         node = slicer.util.getNode(name)
-        slicer.mrmlScene.RemoveNode(node)
+        #slicer.mrmlScene.RemoveNode(node)
+        if node:
+          node.SetDisplayVisibility(0)
 
       self.enableSelectors()
       self.onSelect()
@@ -1849,7 +1868,7 @@ class BronchoscopyWidget:
     return polyData
    
   def onPathSelect(self):
-    self.updateGUI()
+    #self.updateGUI()
     # Hide all paths and fiducials...
     if len(self.pathModelNamesList) > 0:
       for n in xrange(len(self.pathModelNamesList)):
@@ -1884,8 +1903,6 @@ class BronchoscopyWidget:
       # Avoid repetition of the same point twice
       self.centerlinePointsList = numpy.array([list(x) for x in set(tuple(x) for x in self.centerlinePointsList)])
       self.centerlinePointsList = self.centerlinePointsList.tolist()
-
-    print self.centerlinePointsList      
 
     # Display fiducial corresponding to the selected path
     name = pathModel.GetName()
@@ -1935,152 +1952,166 @@ class BronchoscopyWidget:
   def onProbeTrackButtonToggled(self, checked):     
     if checked:
       self.updateGUI()
-      self.ProbeTrackButton.setStyleSheet("background-color: rgb(255,156,126)")
 
-      self.disableButtonsAndSelectors()
-      self.ProbeTrackButton.enabled = True
-      self.FlipImageButton.enabled = True
-
-      self.ProbeTrackButton.text = "Stop Tracking"
-
-      if self.cNode == None:
-        cNodes = slicer.mrmlScene.GetNodesByName('ProbeConnector')
-        if cNodes.GetNumberOfItems() == 0:
-          self.cNode = slicer.vtkMRMLIGTLConnectorNode()
-          slicer.mrmlScene.AddNode(self.cNode)
-          self.cNode.SetName('ProbeConnector')
-        else:
-          self.cNode = cNodes.GetItemAsObject(0)
-
-      self.cNode.SetType(1)
-      self.cNode.SetTypeServer(18944)
-      self.cNode.Start()
-
-      ################## Transform matrix to compensate for possible flipping of the 3D image #####################
-
-      if self.flipCompensationTransform == None:
-        flipCompensationTransformNodes = slicer.mrmlScene.GetNodesByName('flipCompensationTransform')
-        if flipCompensationTransformNodes.GetNumberOfItems() == 0:
-          self.flipCompensationTransform = slicer.vtkMRMLLinearTransformNode()
-          self.flipCompensationTransform.SetName('flipCompensationTransform')
-          slicer.mrmlScene.AddNode(self.flipCompensationTransform)
-        else:
-	  self.flipCompensationTransform = flipCompensationTransformNodes.GetItemAsObject(0)
-
-      ################## This turns the probe of 90 degrees when the tracking is started the first time #####################
-
-      if self.probeCalibrationTransform == None:
-        calibrationTransformNodes = slicer.mrmlScene.GetNodesByName('probeCalibrationTransform')
-        if calibrationTransformNodes.GetNumberOfItems() == 0:
-          self.probeCalibrationTransform = slicer.vtkMRMLLinearTransformNode()
-          self.probeCalibrationTransform.SetName('probeCalibrationTransform')
-          slicer.mrmlScene.AddNode(self.probeCalibrationTransform)
-        else:
-	  self.probeCalibrationTransform = calibrationTransformNodes.GetItemAsObject(0)
-
-      calibrationMatrix = vtk.vtkMatrix4x4()
-      self.probeCalibrationTransform.GetMatrixTransformToParent(calibrationMatrix)
-      calibrationMatrix.SetElement(0,0,0)
-      calibrationMatrix.SetElement(0,2,1)
-      calibrationMatrix.SetElement(2,0,-1)
-      calibrationMatrix.SetElement(2,2,0)
-      self.probeCalibrationTransform.SetMatrixTransformToParent(calibrationMatrix)
-
-      self.probeCalibrationTransform.SetAndObserveTransformNodeID(self.flipCompensationTransform.GetID())
-
-      # Transform to compensate probe position with with centerline points
-
-      if self.centerlineCompensationTransform == None:
-        centerlineCompensationTransformNodes = slicer.mrmlScene.GetNodesByName('centerlineCompensationTransform')
-        if centerlineCompensationTransformNodes.GetNumberOfItems() == 0:
-          self.centerlineCompensationTransform = slicer.vtkMRMLLinearTransformNode()
-          self.centerlineCompensationTransform.SetName('centerlineCompensationTransform')
-          slicer.mrmlScene.AddNode(self.centerlineCompensationTransform)
-        else:
-          self.centerlineCompensationTransform = centerlineCompensationTransformNodes.GetItemAsObject(0)
-
+      # if adding of probeModel has been forgotten a warning will appear and tracking will be stopped 
       probeNode = slicer.util.getNode('ProbeModel')
-      if probeNode:
-        probeDisplayNode = probeNode.GetDisplayNode()
-        probeDisplayNode.SetColor(0.9215686274509803, 0.03137254901960784, 1.0)
-        probeDisplayNode.SetSliceIntersectionVisibility(1)
-        probeDisplayNode.SetSliceIntersectionThickness(7)
+      if probeNode == None:
+        messageBox = qt.QMessageBox()
+        messageBox.warning(None,'Warning!', 'Please add ProbeModel before starting the tracking!')
+        self.ProbeTrackButton.checked = False              
+      else:
+        # Hide registration markers, if any
+        regMarkers = slicer.util.getNode('RegistrationMarker')
+        if regMarkers:
+          regMarkers.SetDisplayVisibility(0)
 
-        ########## A fiducial is created to indicate the position of the probe in saggital, coronal and axial views ##########
+        self.ProbeTrackButton.setStyleSheet("background-color: rgb(255,156,126)")
 
-        #probePositionIndicator = slicer.vtkMRMLMarkupsFiducialNode()
-        #probePositionIndicator.SetName('ProbePositionIndicator')
-        #slicer.mrmlScene.AddNode(probePositionIndicator)
-        # The fiducial is placed on the tip of the probe
-        #probePositionIndicator.AddFiducial(-1.0,-0.0,0.0)
-        #probeIndicatorDisplayNode = probePositionIndicator.GetDisplayNode()
-        #probeIndicatorDisplayNode.SetGlyphScale(6.0)
-        #probeIndicatorDisplayNode.SetGlyphType(10)
-        #probeIndicatorDisplayNode.SetTextScale(0.0)
+        self.disableButtonsAndSelectors()
+        self.ProbeTrackButton.enabled = True
+        self.FlipImageButton.enabled = True
 
-        #######################################################################################################################
+        self.ProbeTrackButton.text = "Stop Tracking"
 
-        if probeNode.GetTransformNodeID() == None:
-          probeNode.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
-          #probePositionIndicator.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
+        if self.cNode == None:
+          cNodes = slicer.mrmlScene.GetNodesByName('ProbeConnector')
+          if cNodes.GetNumberOfItems() == 0:
+            self.cNode = slicer.vtkMRMLIGTLConnectorNode()
+            slicer.mrmlScene.AddNode(self.cNode)
+            self.cNode.SetName('ProbeConnector')
+          else:
+            self.cNode = cNodes.GetItemAsObject(0)
 
-      ################## Camera 1 is connected to the transform #####################
+        self.cNode.SetType(1)
+        self.cNode.SetTypeServer(18944)
+        self.cNode.Start()
+
+        ################## Transform matrix to compensate for possible flipping of the 3D image #####################
+
+        if self.flipCompensationTransform == None:
+          flipCompensationTransformNodes = slicer.mrmlScene.GetNodesByName('flipCompensationTransform')
+          if flipCompensationTransformNodes.GetNumberOfItems() == 0:
+            self.flipCompensationTransform = slicer.vtkMRMLLinearTransformNode()
+            self.flipCompensationTransform.SetName('flipCompensationTransform')
+            slicer.mrmlScene.AddNode(self.flipCompensationTransform)
+          else:
+	    self.flipCompensationTransform = flipCompensationTransformNodes.GetItemAsObject(0)
+
+        ################## This turns the probe of 90 degrees when the tracking is started the first time #####################
+
+        if self.probeCalibrationTransform == None:
+          calibrationTransformNodes = slicer.mrmlScene.GetNodesByName('probeCalibrationTransform')
+          if calibrationTransformNodes.GetNumberOfItems() == 0:
+            self.probeCalibrationTransform = slicer.vtkMRMLLinearTransformNode()
+            self.probeCalibrationTransform.SetName('probeCalibrationTransform')
+            slicer.mrmlScene.AddNode(self.probeCalibrationTransform)
+          else:
+            self.probeCalibrationTransform = calibrationTransformNodes.GetItemAsObject(0)
+
+        calibrationMatrix = vtk.vtkMatrix4x4()
+        self.probeCalibrationTransform.GetMatrixTransformToParent(calibrationMatrix)
+        calibrationMatrix.SetElement(0,0,0)
+        calibrationMatrix.SetElement(0,2,1)
+        calibrationMatrix.SetElement(2,0,-1)
+        calibrationMatrix.SetElement(2,2,0)
+        self.probeCalibrationTransform.SetMatrixTransformToParent(calibrationMatrix)
+ 
+        self.probeCalibrationTransform.SetAndObserveTransformNodeID(self.flipCompensationTransform.GetID())
+
+        # Transform to compensate probe position with with centerline points
+
+        if self.centerlineCompensationTransform == None:
+          centerlineCompensationTransformNodes = slicer.mrmlScene.GetNodesByName('centerlineCompensationTransform')
+          if centerlineCompensationTransformNodes.GetNumberOfItems() == 0:
+            self.centerlineCompensationTransform = slicer.vtkMRMLLinearTransformNode()
+            self.centerlineCompensationTransform.SetName('centerlineCompensationTransform')
+            slicer.mrmlScene.AddNode(self.centerlineCompensationTransform)
+          else:
+            self.centerlineCompensationTransform = centerlineCompensationTransformNodes.GetItemAsObject(0)
+
+        if probeNode:
+          probeDisplayNode = probeNode.GetDisplayNode()
+          probeDisplayNode.SetColor(0.9215686274509803, 0.03137254901960784, 1.0)
+          probeDisplayNode.SetSliceIntersectionVisibility(1)
+          probeDisplayNode.SetSliceIntersectionThickness(7)
+
+          ########## A fiducial is created to indicate the position of the probe in saggital, coronal and axial views ##########
+
+          #probePositionIndicator = slicer.vtkMRMLMarkupsFiducialNode()
+          #probePositionIndicator.SetName('ProbePositionIndicator')
+          #slicer.mrmlScene.AddNode(probePositionIndicator)
+          # The fiducial is placed on the tip of the probe
+          #probePositionIndicator.AddFiducial(-1.0,-0.0,0.0)
+          #probeIndicatorDisplayNode = probePositionIndicator.GetDisplayNode()
+          #probeIndicatorDisplayNode.SetGlyphScale(6.0)
+          #probeIndicatorDisplayNode.SetGlyphType(10)
+          #probeIndicatorDisplayNode.SetTextScale(0.0)
+
+          #######################################################################################################################
+
+          if probeNode.GetTransformNodeID() == None:
+            probeNode.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
+            #probePositionIndicator.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
+
+        ################## Camera 1 is connected to the transform #####################
          
-      self.initializeCamera()
-      self.cameraForNavigation.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
+        self.initializeCamera()
+        self.cameraForNavigation.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
       
-      ####################### Set clipping range for the first camera ####################
-      camera = self.cameraForNavigation.GetCamera()
-      camera.SetClippingRange(0.7081381565016212, 708.1381565016211) # set a random clipping range to force the camera to reset it 
+        ####################### Set clipping range for the first camera ####################
+        camera = self.cameraForNavigation.GetCamera()
+        camera.SetClippingRange(0.7081381565016212, 708.1381565016211) # set a random clipping range to force the camera to reset it 
 
-      ########## Camera 2 is will automatically follow the probe ##########
-      cameraNodes = slicer.mrmlScene.GetNodesByName('Default Scene Camera')
-      self.secondCamera = cameraNodes.GetItemAsObject(1)
-      self.secondCamera.SetFocalPoint(-1.0,0.0,0.0)
-      secCamera = self.secondCamera.GetCamera()
-      secCamera.SetClippingRange(0.5741049687312555, 574.1049687312554)
+        ########## Camera 2 is will automatically follow the probe ##########
+        cameraNodes = slicer.mrmlScene.GetNodesByName('Default Scene Camera')
+        self.secondCamera = cameraNodes.GetItemAsObject(1)
+        self.secondCamera.SetFocalPoint(-1.0,0.0,0.0)
+        secCamera = self.secondCamera.GetCamera()
+        secCamera.SetClippingRange(0.5741049687312555, 574.1049687312554)
 
-      ####### Red, yellow, and green positions are modified to follow the probe on the CT ###### 
+        ####### Red, yellow, and green positions are modified to follow the probe on the CT ###### 
  
-      lm = slicer.app.layoutManager()
-      yellowWidget = lm.sliceWidget('Yellow')
-      self.yellowLogic = yellowWidget.sliceLogic()
-      redWidget = lm.sliceWidget('Red')
-      self.redLogic = redWidget.sliceLogic() 
-      greenWidget = lm.sliceWidget('Green')
-      self.greenLogic = greenWidget.sliceLogic()
+        lm = slicer.app.layoutManager()
+        yellowWidget = lm.sliceWidget('Yellow')
+        self.yellowLogic = yellowWidget.sliceLogic()
+        redWidget = lm.sliceWidget('Red')
+        self.redLogic = redWidget.sliceLogic() 
+        greenWidget = lm.sliceWidget('Green')
+        self.greenLogic = greenWidget.sliceLogic()
  
-      self.sensorTimer.start()
+        self.sensorTimer.start()
        
-      self.layoutManager = slicer.app.layoutManager()
-      #self.firstThreeDView = self.layoutManager.threeDWidget( 0 ).threeDView()
-      self.firstViewCornerAnnotation = self.firstThreeDView.cornerAnnotation()
-      self.secondViewCornerAnnotation = self.secondThreeDView.cornerAnnotation()
+        self.layoutManager = slicer.app.layoutManager()
+        #self.firstThreeDView = self.layoutManager.threeDWidget( 0 ).threeDView()
+        self.firstViewCornerAnnotation = self.firstThreeDView.cornerAnnotation()
+        self.secondViewCornerAnnotation = self.secondThreeDView.cornerAnnotation()
        
     else:  # When button is released...      
       self.ProbeTrackButton.setStyleSheet("background-color: rgb(255,255,255)")
       self.FlipImageButton.enabled = False
-      #self.ImageRegistrationButton.enabled = False
 
       self.sensorTimer.stop()
       self.registrationTimer.stop()
-      self.cNode.Stop()
-      #self.cNode = None
-      #self.cameraForNavigation = None
-      #self.probeCalibrationTransform = None
+      
+      if self.cNode:
+        self.cNode.Stop()
 
-      self.cameraForNavigation.GetFocalPoint(self.lastFPBeforeStoppingTracking)
-      self.cameraForNavigation.GetPosition(self.lastPosBeforeStoppingTracking)
-      self.cameraForNavigation.GetViewUp(self.lastViewUp)
+        self.cameraForNavigation.GetFocalPoint(self.lastFPBeforeStoppingTracking)
+        self.cameraForNavigation.GetPosition(self.lastPosBeforeStoppingTracking)
+        self.cameraForNavigation.GetViewUp(self.lastViewUp)
+        self.cameraForNavigation.SetFocalPoint(self.lastFPBeforeStoppingTracking[0],self.lastFPBeforeStoppingTracking[1],self.lastFPBeforeStoppingTracking[2])
+        self.cameraForNavigation.SetPosition(self.lastPosBeforeStoppingTracking[0],self.lastPosBeforeStoppingTracking[1],self.lastPosBeforeStoppingTracking[2])
+        camera = self.cameraForNavigation.GetCamera()  
+        self.cameraForNavigation.SetViewUp(self.lastViewUp)
+        camera.SetClippingRange(0.7081381565016212, 708.1381565016211)
+
+        cameraNodes = slicer.mrmlScene.GetNodesByName('Default Scene Camera')
+        self.secondCamera = cameraNodes.GetItemAsObject(1)
+        secCamera = self.secondCamera.GetCamera()
+        secCamera.SetClippingRange(0.5741049687312555, 574.1049687312554)
 
       self.enableSelectors()
       self.onSelect()
-
-      self.cameraForNavigation.SetFocalPoint(self.lastFPBeforeStoppingTracking[0],self.lastFPBeforeStoppingTracking[1],self.lastFPBeforeStoppingTracking[2])
-      self.cameraForNavigation.SetPosition(self.lastPosBeforeStoppingTracking[0],self.lastPosBeforeStoppingTracking[1],self.lastPosBeforeStoppingTracking[2])
-      camera = self.cameraForNavigation.GetCamera()  
-      self.cameraForNavigation.SetViewUp(self.lastViewUp)
-      camera.SetClippingRange(0.7081381565016212, 708.1381565016211) # to be checked
 
       if self.centerlinePointsList != []:
         self.CreateFiducialListButton.enabled = True
@@ -2224,24 +2255,11 @@ class BronchoscopyWidget:
 
     pos = [0,0,0]
     self.secondCamera.SetFocalPoint(x,y,z)
-    self.secondCamera.SetPosition(x,y+250,z)
+    self.secondCamera.SetPosition(x,y+330,z)
 
     # force the camera position to be a bit higher to better watch the path
     self.cameraForNavigation.SetPosition(x,y,z-1)
     camera=self.cameraForNavigation.GetCamera()
-    '''p = camera.GetPosition()
-    vpn = camera.GetViewPlaneNormal()
-    print "position: ",p
-    print "VPN: ", vpn
-    p=numpy.asarray(p)
-    vpn=numpy.asarray(vpn)
-    theorFP = p-4*vpn
-    print "Theoretical FP: ", theorFP
-    print "real prev FP: ", camera.GetFocalPoint()
-    d=[0,0,0]
-    #self.cameraForNavigation.SetFocalPoint(theorFP)
-    self.cameraForNavigation.GetFocalPoint(d)
-    print "real new FP: ", d''' 
 
     if len(self.pathModelNamesList) > 0:
       pathModel = self.pathModelSelector.currentNode()
@@ -2289,6 +2307,48 @@ class BronchoscopyWidget:
     
     self.secondThreeDView.forceRender()
 
+  def startVideoStreaming(self, checked):
+    if checked:
+      # Show button to start image registration
+      self.ImageRegistrationButton.show()
+
+      # start streaming video
+      self.VideoRegistrationButton.setText("Stop Video Streaming")
+      if self.videoStreamingNode == None:
+        streamingNodes = slicer.mrmlScene.GetNodesByName('streamingConnector')
+        if streamingNodes.GetNumberOfItems() == 0:
+          self.videoStreamingNode = slicer.vtkMRMLIGTLConnectorNode()
+          slicer.mrmlScene.AddNode(self.videoStreamingNode)
+          self.videoStreamingNode.SetName('streamingConnector')
+        else:
+          self.videoStreamingNode = streamingNodes.GetItemAsObject(0)
+
+        self.videoStreamingNode.SetTypeClient('localhost',18945)
+        self.videoStreamingNode.Start()
+
+        self.checkStreamingTimer.start()
+    else:
+
+      # Stop image registration and hide button 
+      self.ImageRegistrationButton.checked = False
+      self.ImageRegistrationButton.hide()
+
+      if self.videoStreamingNode != None:
+        self.VideoRegistrationButton.setText("Start Video Streaming")
+        self.videoStreamingNode.Stop()
+
+  def showVideoStreaming(self):
+    if self.videoStreamingNode != None: 
+      if self.videoStreamingNode.GetState() == 2:
+        videoNode = slicer.util.getNode('Image_Reference')
+        if videoNode:
+          realViewWidget = self.layoutManager.sliceWidget('RealView')
+          RVLogic = realViewWidget.sliceLogic()
+          RV_cn = RVLogic.GetSliceCompositeNode()
+          RV_cn.SetBackgroundVolumeID(videoNode.GetID())
+          RVLogic.FitSliceToVolume(videoNode,1,1)
+          self.checkStreamingTimer.stop()
+
   ###########################################################################################
   ################################## Image Registration #####################################
   ###########################################################################################
@@ -2312,6 +2372,7 @@ class BronchoscopyWidget:
     
     '''w = vtk.vtkPNGWriter()
     w.SetInputConnection(VOIExtract.GetOutputPort())
+
     w.SetFileName('C:/Users/Lab/Desktop/text.png')
     w.Write()'''
     
@@ -2399,47 +2460,9 @@ class BronchoscopyWidget:
 
     cliRegistrationNode = slicer.cli.run( imageRegistration,None,parameters,wait_for_completion=True )
     angle = cliRegistrationNode.GetParameterDefault(0,2)
-    #angle = int(angle)
 
-    #self.firstThreeDView.rollDirection = self.firstThreeDView.RollRight
-    #self.firstThreeDView.pitchRollYawIncrement = abs(angle)
-    #self.firstThreeDView.roll()
     camera = self.cameraForNavigation.GetCamera()
-    camera.Roll(angle)
+    camera.Roll(float(angle))
 
     slicer.mrmlScene.RemoveNode(movingScalarVolume)
     slicer.mrmlScene.RemoveNode(realScalarVolume)
-
-  def startVideoStreaming(self, checked):
-    if checked:
-      self.VideoRegistrationButton.setText("Stop Video Streaming")
-      if self.videoStreamingNode == None:
-        streamingNodes = slicer.mrmlScene.GetNodesByName('streamingConnector')
-        if streamingNodes.GetNumberOfItems() == 0:
-          self.videoStreamingNode = slicer.vtkMRMLIGTLConnectorNode()
-          slicer.mrmlScene.AddNode(self.videoStreamingNode)
-          self.videoStreamingNode.SetName('streamingConnector')
-        else:
-          self.videoStreamingNode = streamingNodes.GetItemAsObject(0)
-
-        #self.videoStreamingNode.SetType(2)
-        self.videoStreamingNode.SetTypeClient('localhost',18945)
-        self.videoStreamingNode.Start()
-
-        self.checkStreamingTimer.start()
-    else:
-      if self.videoStreamingNode != None:
-        self.VideoRegistrationButton.setText("Start Video Streaming")
-        self.videoStreamingNode.Stop()      
-
-  def showVideoStreaming(self):
-    if self.videoStreamingNode != None: 
-      if self.videoStreamingNode.GetState() == 2:
-        videoNode = slicer.util.getNode('Image_Reference')
-        if videoNode:
-          realViewWidget = self.layoutManager.sliceWidget('RealView')
-          RVLogic = realViewWidget.sliceLogic()
-          RV_cn = RVLogic.GetSliceCompositeNode()
-          RV_cn.SetBackgroundVolumeID(videoNode.GetID())
-          RVLogic.FitSliceToVolume(videoNode,1,1)
-          self.checkStreamingTimer.stop() 
