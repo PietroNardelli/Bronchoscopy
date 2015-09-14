@@ -955,7 +955,7 @@ class BronchoscopyWidget:
           "inputVolume": labelVolume.GetID(),
           "outputVolume": self.centerline.GetID(),	  
           }
-      slicer.cli.run( centerlineExtraction,None,parameters,wait_for_completion=True )
+      slicer.cli.run( centerlineExtraction,None,parameters,wait_for_completion=False )
 
       # create 3D model of the centerline
       hierarchyList = slicer.mrmlScene.GetNodesByName('CenterlineModelHierarchy')
@@ -2458,7 +2458,7 @@ class BronchoscopyWidget:
           "anglesNumber": anglesNumber,
           }
 
-    cliRegistrationNode = slicer.cli.run( imageRegistration,None,parameters,wait_for_completion=True )
+    cliRegistrationNode = slicer.cli.run( imageRegistration,None,parameters,wait_for_completion=False )
     angle = cliRegistrationNode.GetParameterDefault(0,2)
 
     camera = self.cameraForNavigation.GetCamera()
