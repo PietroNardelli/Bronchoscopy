@@ -292,7 +292,7 @@ class BronchoscopyWidget:
     ########################################################################################################
 
     self.CreateFiducialListButton = qt.QPushButton("Create and Save a Fiducial List From Centerline")
-    self.CreateFiducialListButton.toolTip = "Create a list of fiducial points starting from the extracted cenetrline bof the 3D model."
+    self.CreateFiducialListButton.toolTip = "Create a list of fiducial points starting from the extracted centerline of the 3D model."
     self.CreateFiducialListButton.setFixedSize(250,25)
 
     if self.centerlinePointsList != []:
@@ -955,7 +955,7 @@ class BronchoscopyWidget:
           "inputVolume": labelVolume.GetID(),
           "outputVolume": self.centerline.GetID(),	  
           }
-      slicer.cli.run( centerlineExtraction,None,parameters,wait_for_completion=False )
+      slicer.cli.run( centerlineExtraction,None,parameters,wait_for_completion=True )
 
       # create 3D model of the centerline
       hierarchyList = slicer.mrmlScene.GetNodesByName('CenterlineModelHierarchy')
@@ -1006,7 +1006,8 @@ class BronchoscopyWidget:
       slicer.mrmlScene.RemoveNode(self.uploadedCenterlineModel)
 
     self.ProbeTrackButton.enabled = True
-    
+    #self.CreateFiducialListButton.enabled = True    
+
     if self.centerline != None:
       slicer.mrmlScene.RemoveNode(self.centerline)
 
@@ -1191,7 +1192,19 @@ class BronchoscopyWidget:
       writer.writerow(['# CoordinateSystem = 0'])
       writer.writerow(['# columns = id']+['x']+['y']+['z']+['ow']+['ox']+['oy']+['oz']+['vis']+['sel']+['lock']+['label']+['desc']+['associatedNodeID'])
       writer.writerows(fiducialList)  
-   
+
+    fiducialList = []
+    for n in xrange(len(self.centerlinePointsList)):
+      point = self.centerlinePointsList[n]
+      line = [point[0],point[1],point[2]]
+      fiducialList.append(line)
+
+    fileSecondName = localDirectory + '/CenterlinePositions.fcsv'
+    a = []
+    with open(fileSecondName, "wb") as f:
+      writer = csv.writer(f,)
+      writer.writerows(fiducialList)    
+
     self.enableSelectors()
 
     self.onSelect()
@@ -2458,7 +2471,7 @@ class BronchoscopyWidget:
           "anglesNumber": anglesNumber,
           }
 
-    cliRegistrationNode = slicer.cli.run( imageRegistration,None,parameters,wait_for_completion=False )
+    cliRegistrationNode = slicer.cli.run( imageRegistration,None,parameters,wait_for_completion=True )
     angle = cliRegistrationNode.GetParameterDefault(0,2)
 
     camera = self.cameraForNavigation.GetCamera()
