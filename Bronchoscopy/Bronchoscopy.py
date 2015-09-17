@@ -892,7 +892,7 @@ class BronchoscopyWidget:
       p = [point[0],point[1],point[2]]
       pointsList.append(p)
 
-    localDirectory = self.folderPathSelection.text + "/RegistrationMarkers.csv"
+    localDirectory = self.folderPathSelection.text + "/F.csv"
 
     with open(localDirectory, "wb") as f:
       writer = csv.writer(f, delimiter=' ')
@@ -1199,7 +1199,7 @@ class BronchoscopyWidget:
       line = [point[0],point[1],point[2]]
       fiducialList.append(line)
 
-    fileSecondName = localDirectory + '/CenterlinePositions.fcsv'
+    fileSecondName = localDirectory + '/CenterlinePositions.txt'
     a = []
     with open(fileSecondName, "wb") as f:
       writer = csv.writer(f,)
