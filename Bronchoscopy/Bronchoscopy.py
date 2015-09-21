@@ -84,17 +84,25 @@ class BronchoscopyWidget:
     self.lastPosBeforeStoppingTracking = [0,0,0]
     self.lastViewUp = [0,0,0]
 
+    self.thirdCamera = None
+    self.thirdCameraInitialized = 0
+
+    self.length = 1000000000
+
     self.probeToTrackerTransformNode = None
     self.videoStreamingNode = None
 
     self.customLayoutId = 501
+    self.three3DViewsLayoutId = 502    
 
     self.layoutManager = slicer.app.layoutManager()
     
+    self.setThree3Dviews()
     self.setLayout()
 
     self.firstThreeDView = self.layoutManager.threeDWidget( 0 ).threeDView()
     self.secondThreeDView = self.layoutManager.threeDWidget( 1 ).threeDView()
+    self.thirdThreeDView = None
 
     self.updateGUI()
 
@@ -155,17 +163,72 @@ class BronchoscopyWidget:
     self.layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(self.customLayoutId, customLayout)
     self.layoutManager.setLayout(self.customLayoutId)
 
+  def setThree3Dviews(self):
+    layout = ("<layout type=\"vertical\" split=\"true\" >"
+                    " <item>"
+                    "  <layout type=\"horizontal\">"
+                    "   <item>"
+                    "    <view class=\"vtkMRMLSliceNode\" singletontag=\"RealView\">"
+                    "     <property name=\"orientation\" action=\"default\">Axial</property>"
+                    "     <property name=\"viewlabel\" action=\"default\">RV</property>"
+                    "     <property name=\"viewcolor\" action=\"default\">#8C8C8C</property>"
+                    "    </view>"
+                    "   </item>"
+                    "   <item>"
+                    "    <view class=\"vtkMRMLViewNode\" singletontag=\"1\">"
+                    "     <property name=\"First3DView\" action=\"default\">1</property>"
+                    "    </view>"
+                    "   </item>"
+                    "   <item>"
+                    "    <view class=\"vtkMRMLViewNode\" singletontag=\"2\" type=\"secondary\">"
+                    "     <property name=\"Second3DView\" action=\"default\">2</property>"
+                    "    </view>"
+                    "   </item>"
+                    "  </layout>"
+                    " </item>"
+                    " <item>"
+                    "  <layout type=\"horizontal\">"
+                    "   <item>"
+                    "    <view class=\"vtkMRMLViewNode\" singletontag=\"3\" type=\"secondary\">"
+                    "     <property name=\"Third3DView\" action=\"default\">3</property>"
+                    "    </view>"
+                    "   </item>"
+                    "   <item>"
+                    "    <view class=\"vtkMRMLSliceNode\" singletontag=\"Red\">"
+                    "     <property name=\"orientation\" action=\"default\">Axial</property>"
+                    "     <property name=\"viewlabel\" action=\"default\">R</property>"
+                    "     <property name=\"viewcolor\" action=\"default\">#F34A33</property>"
+                    "    </view>"
+                    "   </item>"
+                    "   <item>"
+                    "    <view class=\"vtkMRMLSliceNode\" singletontag=\"Green\">"
+                    "     <property name=\"orientation\" action=\"default\">Coronal</property>"
+                    "     <property name=\"viewlabel\" action=\"default\">G</property>"
+                    "     <property name=\"viewcolor\" action=\"default\">#6EB04B</property>"
+                    "    </view>"
+                    "   </item>"
+                    "  </layout>"
+                    " </item>"
+                    "</layout>")
+    self.layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(self.three3DViewsLayoutId, layout)
+    #self.layoutManager.setLayout(self.three3DViewsLayoutId)
+
   def cleanup(self):
     pass
 
   def updateGUI(self):
-    self.layoutManager.setLayout(self.customLayoutId)
+    if(self.thirdThreeDView):
+      self.layoutManager.setLayout(self.three3DViewsLayoutId)
+      self.thirdThreeDView.resetFocalPoint()
+      self.thirdThreeDView.lookFromViewAxis(ctk.ctkAxesWidget().Anterior)
+    else:
+      self.layoutManager.setLayout(self.customLayoutId)
 
     self.firstThreeDView.resetFocalPoint()
     self.firstThreeDView.lookFromViewAxis(ctk.ctkAxesWidget().Anterior)
 
     self.secondThreeDView.resetFocalPoint()
-    self.secondThreeDView.lookFromViewAxis(ctk.ctkAxesWidget().Anterior)
+    self.secondThreeDView.lookFromViewAxis(ctk.ctkAxesWidget().Anterior)  
 
     red_logic = slicer.app.layoutManager().sliceWidget("Red").sliceLogic()
     red_cn = red_logic.GetSliceCompositeNode()
@@ -566,6 +629,22 @@ class BronchoscopyWidget:
       self.ProbeTrackButton.enabled = False
 
     ############################################################################################
+    ##################################  Three 3D Views Button  #####################################
+    ############################################################################################
+
+    self.newLayoutImageButton = qt.QPushButton("Add Third 3D View")
+
+    self.newLayoutImageButton.toolTip = "Change to layout with a third 3D view to help navigation"
+    self.newLayoutImageButton.setFixedSize(250,35)
+    self.newLayoutImageButton.enabled = True
+
+    newLayoutBox = qt.QHBoxLayout()
+    
+    newLayoutBox.addWidget(self.newLayoutImageButton, 0, 4)
+
+    trackerFormLayout.addRow(newLayoutBox)
+
+    ############################################################################################
     ##################################  Flip Image Button  #####################################
     ############################################################################################
 
@@ -580,6 +659,7 @@ class BronchoscopyWidget:
     flippingBox.addWidget(self.FlipImageButton, 0, 4)
 
     trackerFormLayout.addRow(flippingBox)
+
 
     #####################################################################################
     ################################ Video Streaming ####################################
@@ -648,6 +728,7 @@ class BronchoscopyWidget:
     self.pathModelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onPathSelect)
 
     self.ProbeTrackButton.connect('toggled(bool)', self.onProbeTrackButtonToggled)
+    self.newLayoutImageButton.connect('clicked(bool)', self.onChangeLayoutButtonToggled)
     self.FlipImageButton.connect('clicked(bool)', self.onFlipImageButton)
 
     self.ImageRegistrationButton.connect('toggled(bool)',self.onStartImageRegistrationButtonPressed)
@@ -1471,6 +1552,9 @@ class BronchoscopyWidget:
     self.fitSlicesToBackground()
     self.layoutManager.setLayout(self.customLayoutId)
 
+    self.firstThreeDView = self.layoutManager.threeDWidget( 0 ).threeDView()
+    self.secondThreeDView = self.layoutManager.threeDWidget( 1 ).threeDView()
+
     fidIndex = self.ROIsPoints.currentIndex
     ROIsList = slicer.util.getNode('ROIFiducials')
     if fidIndex >= 0:
@@ -2066,16 +2150,22 @@ class BronchoscopyWidget:
             probeNode.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
             #probePositionIndicator.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
 
-        ################## Camera 1 is connected to the transform #####################
+        ################## Camera 1 and 3 (if any) are initialized and connected to the transform #####################
          
         self.initializeCamera()
         self.cameraForNavigation.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
+        if self.thirdCamera:
+          self.thirdCamera.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
       
-        ####################### Set clipping range for the first camera ####################
+        ####################### Set clipping range for first and third (if any) cameras ####################
         camera = self.cameraForNavigation.GetCamera()
         camera.SetClippingRange(0.7081381565016212, 708.1381565016211) # set a random clipping range to force the camera to reset it 
 
-        ########## Camera 2 is will automatically follow the probe ##########
+        if self.thirdCamera:
+          thirdCamera = self.thirdCamera.GetCamera()
+          thirdCamera.SetClippingRange(0.7081381565016212, 708.1381565016211)
+
+        ########## Camera 2 is will follow the probe from outside the model ##########
         cameraNodes = slicer.mrmlScene.GetNodesByName('Default Scene Camera')
         self.secondCamera = cameraNodes.GetItemAsObject(1)
         self.secondCamera.SetFocalPoint(-1.0,0.0,0.0)
@@ -2098,6 +2188,9 @@ class BronchoscopyWidget:
         #self.firstThreeDView = self.layoutManager.threeDWidget( 0 ).threeDView()
         self.firstViewCornerAnnotation = self.firstThreeDView.cornerAnnotation()
         self.secondViewCornerAnnotation = self.secondThreeDView.cornerAnnotation()
+        self.thirdViewCornerAnnotation = None
+        if self.thirdThreeDView: 
+          self.thirdViewCornerAnnotation = self.thirdThreeDView.cornerAnnotation()        
        
     else:  # When button is released...      
       self.ProbeTrackButton.setStyleSheet("background-color: rgb(255,255,255)")
@@ -2172,6 +2265,56 @@ class BronchoscopyWidget:
           self.lastViewUp = [0,0,0]
 
       self.cameraForNavigation.SetViewAngle(55)
+
+    if self.thirdThreeDView:
+      self.thirdCamera = cameraNodes.GetItemAsObject(2)
+      if cameraNodes.GetNumberOfItems() > 0:
+        if self.thirdCamera.GetTransformNodeID() == None:
+          f = [0.0,0.0,0.0]
+          self.cameraForNavigation.GetPosition(f)
+          f[0] += 20
+	  f[1] += 5        
+          self.thirdCamera.SetPosition(f)
+          self.cameraForNavigation.GetFocalPoint(f)
+          self.thirdCamera.SetFocalPoint(f)
+          viewUp = [0.0,0.0,-1.0]
+          self.thirdCamera.SetViewUp(viewUp)
+        else:
+          if self.lastFPBeforeStoppingTracking != [0,0,0] and self.lastPosBeforeStoppingTracking != [0,0,0] and self.lastViewUp != [0,0,0]:
+            self.thirdCamera.SetFocalPoint(self.lastFPBeforeStoppingTracking[0],self.lastFPBeforeStoppingTracking[1],self.lastFPBeforeStoppingTracking[2])
+            self.thirdCamera.SetPosition(self.lastPosBeforeStoppingTracking[0],self.lastPosBeforeStoppingTracking[1],self.lastPosBeforeStoppingTracking[2])
+            thirdCamera = self.thirdCamera.GetCamera()  
+            self.thirdCamera.SetViewUp(self.lastViewUp)
+            thirdCamera.SetClippingRange(0.7081381565016212, 708.1381565016211)
+
+            self.lastFPBeforeStoppingTracking  = [0,0,0]
+            self.lastPosBeforeStoppingTracking = [0,0,0]
+            self.lastViewUp = [0,0,0]
+
+        self.thirdCamera.SetViewAngle(55)
+        self.thirdCameraInitialized = 1
+
+  def onChangeLayoutButtonToggled(self):
+    self.fitSlicesToBackground()
+    self.layoutManager.setLayout(self.three3DViewsLayoutId)
+
+    if self.firstThreeDView == None:
+      self.firstThreeDView = self.layoutManager.threeDWidget( 0 ).threeDView()
+    if self.secondThreeDView == None:
+      self.secondThreeDView = self.layoutManager.threeDWidget( 1 ).threeDView()
+  
+    self.thirdThreeDView = self.layoutManager.threeDWidget( 2 ).threeDView()
+
+    cameraNodes = slicer.mrmlScene.GetNodesByName('Default Scene Camera')
+    self.thirdCamera = cameraNodes.GetItemAsObject(2)
+
+    if self.probeCalibrationTransform:
+      self.thirdCamera.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
+
+    thirdCamera = self.thirdCamera.GetCamera()
+    thirdCamera.SetClippingRange(0.7081381565016212, 708.1381565016211)
+
+    #self.updateGUI()
 
   def onFlipImageButton(self):
     if self.flipCompensationTransform:
@@ -2266,18 +2409,31 @@ class BronchoscopyWidget:
 
     self.centerlineCompensationTransform.SetMatrixTransformToParent(tMatrix)
 
-    pos = [0,0,0]
-    self.secondCamera.SetFocalPoint(x,y,z)
-    self.secondCamera.SetPosition(x,y+330,z)
-
     # force the camera position to be a bit higher to better watch the path
     self.cameraForNavigation.SetPosition(x,y,z-1)
-    camera=self.cameraForNavigation.GetCamera()
+
+    if self.thirdCamera:
+      if self.thirdCameraInitialized == 0:
+        self.thirdCamera.SetPosition(x+20,y+5,z+70)
+      fp = [0.0,0.0,0.0]
+      self.cameraForNavigation.GetFocalPoint(fp)
+      self.thirdCamera.SetFocalPoint(fp)
+      viewUp = [0.0,0.0,0.0]
+      self.cameraForNavigation.GetViewUp(viewUp)
+      self.thirdCamera.SetViewUp(viewUp)
 
     if len(self.pathModelNamesList) > 0:
       pathModel = self.pathModelSelector.currentNode()
       pathPolyData = pathModel.GetPolyData()
       self.distanceToTargetComputation(pathPolyData, closestPoint)
+
+    pos = [0,0,0]
+    self.secondCamera.SetFocalPoint(x,y,z)
+    
+    if self.length > 90:
+      self.secondCamera.SetPosition(x,y+500,z)
+    else:
+      self.secondCamera.SetPosition(x,y+200,z)
 
   def distanceToTargetComputation(self, polyData, secondPoint):
 
@@ -2287,18 +2443,18 @@ class BronchoscopyWidget:
     polyData.GetPoint(numberOfPoints-1, firstPoint)
 
     squaredDistance = vtk.vtkMath.Distance2BetweenPoints(firstPoint, secondPoint)
-    length = math.sqrt(squaredDistance)
-    length = int(length)
+    self.length = math.sqrt(squaredDistance)
+    self.length = int(self.length)
     
     # Change color of the fiducial when close to the ROI
     ROIFiducialList = slicer.util.getNode('ROIFiducials')
     displayNode = ROIFiducialList.GetDisplayNode()
-    if length <= 3:
+    if self.length <= 4:
       displayNode.SetSelectedColor(0.4, 1.0, 1.0)
     else:
       displayNode.SetSelectedColor(1.0,0.0,0.0)      
     
-    string_length = str(length) + ' mm'        
+    string_length = str(self.length) + ' mm'        
        
     self.distanceToTarget.setText(string_length)
     
@@ -2306,19 +2462,28 @@ class BronchoscopyWidget:
 
     self.firstViewCornerAnnotation.SetText(1,distToTarget)
     self.secondViewCornerAnnotation.SetText(1,distToTarget)
+    if self.thirdViewCornerAnnotation:
+      self.thirdViewCornerAnnotation.SetText(1,distToTarget)
     
     color = qt.QColor('yellow')
-    firsTxtProperty = self.firstViewCornerAnnotation.GetTextProperty()
-    firsTxtProperty.SetColor(color.redF(), color.greenF(), color.blueF())
-    firsTxtProperty.SetBold(1)
-    #firsTxtProperty.SetFontFamilyAsString('Courier')
+    firstTxtProperty = self.firstViewCornerAnnotation.GetTextProperty()
+    firstTxtProperty.SetColor(color.redF(), color.greenF(), color.blueF())
+    firstTxtProperty.SetBold(1)
+    #firstTxtProperty.SetFontFamilyAsString('Courier')
     
     secondTxtProperty = self.secondViewCornerAnnotation.GetTextProperty()
     secondTxtProperty.SetColor(color.redF(), color.greenF(), color.blueF())
     secondTxtProperty.SetBold(1)
     #secondTxtProperty.SetFontFamilyAsString('Courier')
-    
+
     self.secondThreeDView.forceRender()
+
+    if self.thirdViewCornerAnnotation:
+      thirdTxtProperty = self.thirdViewCornerAnnotation.GetTextProperty()
+      thirdTxtProperty.SetColor(color.redF(), color.greenF(), color.blueF())
+      thirdTxtProperty.SetBold(1)
+      #thirdTxtProperty.SetFontFamilyAsString('Courier')
+      self.thirdThreeDView.forceRender()
 
   def startVideoStreaming(self, checked):
     if checked:
