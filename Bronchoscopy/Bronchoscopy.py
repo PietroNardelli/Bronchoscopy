@@ -100,8 +100,11 @@ class BronchoscopyWidget:
     self.setThree3Dviews()
     self.setLayout()
 
-    self.firstThreeDView = self.layoutManager.threeDWidget( 0 ).threeDView()
-    self.secondThreeDView = self.layoutManager.threeDWidget( 1 ).threeDView()
+    viewNode1 = slicer.util.getNode('vtkMRMLViewNode1')
+    viewNode2 = slicer.util.getNode('vtkMRMLViewNode2')
+
+    self.firstThreeDView = self.layoutManager.viewWidget(viewNode1).threeDView()
+    self.secondThreeDView = self.layoutManager.viewWidget( viewNode2 ).threeDView()
     self.thirdThreeDView = None
 
     self.updateGUI()
@@ -112,7 +115,7 @@ class BronchoscopyWidget:
       self.updateGUI()
 
   def setLayout(self):
-    customLayout = ("<layout type=\"vertical\" split=\"true\" >"
+    customLayout = ("<layout type=\"vertical\" split=\"false\" >"
                     " <item>"
                     "  <layout type=\"horizontal\">"
                     "   <item>"
@@ -218,10 +221,12 @@ class BronchoscopyWidget:
 
   def updateGUI(self):
     if(self.thirdThreeDView):
+      self.layoutManager.setLayout(15)
       self.layoutManager.setLayout(self.three3DViewsLayoutId)
       self.thirdThreeDView.resetFocalPoint()
       self.thirdThreeDView.lookFromViewAxis(ctk.ctkAxesWidget().Anterior)
     else:
+      self.layoutManager.setLayout(15)
       self.layoutManager.setLayout(self.customLayoutId)
 
     self.firstThreeDView.resetFocalPoint()
@@ -1552,8 +1557,11 @@ class BronchoscopyWidget:
     self.fitSlicesToBackground()
     self.layoutManager.setLayout(self.customLayoutId)
 
-    self.firstThreeDView = self.layoutManager.threeDWidget( 0 ).threeDView()
-    self.secondThreeDView = self.layoutManager.threeDWidget( 1 ).threeDView()
+    viewNode1 = slicer.util.getNode('vtkMRMLViewNode1')
+    viewNode2 = slicer.util.getNode('vtkMRMLViewNode2')
+    
+    self.firstThreeDView = self.layoutManager.viewWidget(viewNode1).threeDView()
+    self.secondThreeDView = self.layoutManager.viewWidget(viewNode2).threeDView()
 
     fidIndex = self.ROIsPoints.currentIndex
     ROIsList = slicer.util.getNode('ROIFiducials')
@@ -2299,11 +2307,14 @@ class BronchoscopyWidget:
     self.layoutManager.setLayout(self.three3DViewsLayoutId)
 
     if self.firstThreeDView == None:
-      self.firstThreeDView = self.layoutManager.threeDWidget( 0 ).threeDView()
+      viewNode1 = slicer.util.getNode('vtkMRMLViewNode1')
+      self.firstThreeDView = self.layoutManager.viewWidget(viewNode1).threeDView()
     if self.secondThreeDView == None:
-      self.secondThreeDView = self.layoutManager.threeDWidget( 1 ).threeDView()
-  
-    self.thirdThreeDView = self.layoutManager.threeDWidget( 2 ).threeDView()
+      viewNode2 = slicer.util.getNode('vtkMRMLViewNode2')
+      self.secondThreeDView = self.layoutManager.viewWidget( viewNode2 ).threeDView()
+
+    viewNode3 = slicer.util.getNode('vtkMRMLViewNode3')
+    self.thirdThreeDView = self.layoutManager.viewWidget( viewNode3 ).threeDView()
 
     cameraNodes = slicer.mrmlScene.GetNodesByName('Default Scene Camera')
     self.thirdCamera = cameraNodes.GetItemAsObject(2)
@@ -2642,5 +2653,5 @@ class BronchoscopyWidget:
     camera = self.cameraForNavigation.GetCamera()
     camera.Roll(float(angle))
 
-    slicer.mrmlScene.RemoveNode(movingScalarVolume)
-    slicer.mrmlScene.RemoveNode(realScalarVolume)
+    #slicer.mrmlScene.RemoveNode(movingScalarVolume)
+    #slicer.mrmlScene.RemoveNode(realScalarVolume)
