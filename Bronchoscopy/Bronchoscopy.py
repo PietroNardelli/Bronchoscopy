@@ -6,6 +6,7 @@ import numpy.linalg
 from vtk.util.numpy_support import vtk_to_numpy
 import csv
 import math
+import time
 
 #
 # Bronchoscopy
@@ -58,6 +59,8 @@ class BronchoscopyWidget:
 
     self.pathModelNamesList = []
 
+    self.bifurcationPointsList = []
+
     #
     # Sensor Tracking Variables
     #
@@ -65,12 +68,10 @@ class BronchoscopyWidget:
     self.sensorTimer.setInterval(1)
     self.sensorTimer.connect('timeout()', self.ReadPosition)
 
-    self.registrationTimer = qt.QTimer()
-    self.registrationTimer.setInterval(5000)
-    self.registrationTimer.connect('timeout()', self.registerImage)
+    self.time = time.time()
 
     self.checkStreamingTimer = qt.QTimer()
-    self.checkStreamingTimer.setInterval(5)
+    self.checkStreamingTimer.setInterval(1)
     self.checkStreamingTimer.connect('timeout()', self.showVideoStreaming)
 
     self.previousMatrixSigns = []
@@ -248,24 +249,6 @@ class BronchoscopyWidget:
     displayNode.SetWindowLevel(1400,-500)
 
   def setup(self):
-    #
-    # Reload and Test area
-    #
-    reloadCollapsibleButton = ctk.ctkCollapsibleButton()
-    reloadCollapsibleButton.text = "Reload Section"
-    self.layout.addWidget(reloadCollapsibleButton)
-    self.layout.setSpacing(6)
-    reloadFormLayout = qt.QFormLayout(reloadCollapsibleButton)
-
-    # reload button
-    # (use this during development, but remove it when delivering
-    #  your module to users)
-    self.reloadButton = qt.QPushButton("Reload")
-    self.reloadButton.toolTip = "Reload this module."
-    self.reloadButton.name = "Bronchoscopy Reload"
-    reloadFormLayout.addWidget(self.reloadButton)
-    self.reloadButton.connect('clicked()', self.onReload)
-
     #
     # Parameters Area
     #
@@ -642,6 +625,7 @@ class BronchoscopyWidget:
     self.newLayoutImageButton.toolTip = "Change to layout with a third 3D view to help navigation"
     self.newLayoutImageButton.setFixedSize(250,35)
     self.newLayoutImageButton.enabled = True
+    self.newLayoutImageButton.checkable = True
 
     newLayoutBox = qt.QHBoxLayout()
     
@@ -695,7 +679,7 @@ class BronchoscopyWidget:
     self.ImageRegistrationButton = qt.QPushButton("Start Image Registration")
     self.ImageRegistrationButton.toolTip = "Start registration between real and virtual images."
     self.ImageRegistrationButton.setFixedSize(200,40)
-    self.ImageRegistrationButton.enabled = True
+    self.ImageRegistrationButton.enabled = False
     self.ImageRegistrationButton.checkable = True
     self.ImageRegistrationButton.hide()
     
@@ -733,7 +717,7 @@ class BronchoscopyWidget:
     self.pathModelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onPathSelect)
 
     self.ProbeTrackButton.connect('toggled(bool)', self.onProbeTrackButtonToggled)
-    self.newLayoutImageButton.connect('clicked(bool)', self.onChangeLayoutButtonToggled)
+    self.newLayoutImageButton.connect('toggled(bool)', self.onChangeLayoutButtonToggled)
     self.FlipImageButton.connect('clicked(bool)', self.onFlipImageButton)
 
     self.ImageRegistrationButton.connect('toggled(bool)',self.onStartImageRegistrationButtonPressed)
@@ -882,54 +866,6 @@ class BronchoscopyWidget:
     self.centerlineModelSelector.enabled = True
     self.registrationSelector.enabled = True
 
-  def onReload(self,moduleName="Bronchoscopy"):
-    """Generic reload method for any scripted module.
-    ModuleWizard will subsitute correct default moduleName.
-    """
-    import os
-    import unittest
-    from __main__ import vtk, qt, ctk, slicer, numpy
-    import imp, sys
-
-    widgetName = moduleName + "Widget"
-
-    # reload the source code
-    # - set source file path
-    # - load the module to the global space
-    filePath = eval('slicer.modules.%s.path' % moduleName.lower())
-    p = os.path.dirname(filePath)
-    if not sys.path.__contains__(p):
-      sys.path.insert(0,p)
-    fp = open(filePath, "r")
-    globals()[moduleName] = imp.load_module(
-        moduleName, fp, filePath, ('.py', 'r', imp.PY_SOURCE))
-    fp.close()
-
-    # rebuild the widget
-    # - find and hide the existing widget
-    # - create a new widget in the existing parent
-    parent = slicer.util.findChildren(name='%s Reload' % moduleName)[0].parent().parent()
-    for child in parent.children():
-      try:
-        child.hide()
-      except AttributeError:
-        pass
-    # Remove spacer items
-    item = parent.layout().itemAt(0)
-    while item:
-      parent.layout().removeItem(item)
-      item = parent.layout().itemAt(0)
-
-    # delete the old widget instance
-    if hasattr(globals()['slicer'].modules, widgetName):
-      getattr(globals()['slicer'].modules, widgetName).cleanup()
-
-    # create new widget inside existing parent
-    globals()[widgetName.lower()] = eval(
-        'globals()["%s"].%s(parent)' % (moduleName, widgetName))
-    globals()[widgetName.lower()].setup()
-    setattr(globals()['slicer'].modules, widgetName, globals()[widgetName.lower()])
-
 ##################################################################################################
 ############################## REGISTRATION FIDUCIALS SAVING ##################################### 
 ##################################################################################################
@@ -1005,7 +941,7 @@ class BronchoscopyWidget:
     self.folderPathSelection.setText(qt.QFileDialog.getExistingDirectory())
     self.enableSelectors()
     self.onSelect()
-
+    
 ##################################################################################################
 ################################### CENTERLINE EXTRACTION ######################################## 
 ##################################################################################################
@@ -2057,13 +1993,19 @@ class BronchoscopyWidget:
   def onProbeTrackButtonToggled(self, checked):     
     if checked:
       self.updateGUI()
+      self.ImageRegistrationButton.show()
 
-      # if adding of probeModel has been forgotten a warning will appear and tracking will be stopped 
+      # if probeModel was not loaded a warning will appear and tracking will be stopped 
       probeNode = slicer.util.getNode('ProbeModel')
+      pathModel = self.pathModelSelector.currentNode()      
       if probeNode == None:
         messageBox = qt.QMessageBox()
-        messageBox.warning(None,'Warning!', 'Please add ProbeModel before starting the tracking!')
-        self.ProbeTrackButton.checked = False              
+        messageBox.warning(None,'Warning!', 'Please add ProbeModel before starting the sensor tracking!')
+        self.ProbeTrackButton.checked = False
+      elif pathModel == None:
+        messageBox = qt.QMessageBox()
+        messageBox.warning(None,'Warning!', 'Please select a path before starting the sensor tracking!')
+        self.ProbeTrackButton.checked = False
       else:
         # Hide registration markers, if any
         regMarkers = slicer.util.getNode('RegistrationMarker')
@@ -2203,9 +2145,9 @@ class BronchoscopyWidget:
     else:  # When button is released...      
       self.ProbeTrackButton.setStyleSheet("background-color: rgb(255,255,255)")
       self.FlipImageButton.enabled = False
+      self.ImageRegistrationButton.hide()
 
       self.sensorTimer.stop()
-      self.registrationTimer.stop()
       
       if self.cNode:
         self.cNode.Stop()
@@ -2302,30 +2244,34 @@ class BronchoscopyWidget:
         self.thirdCamera.SetViewAngle(55)
         self.thirdCameraInitialized = 1
 
-  def onChangeLayoutButtonToggled(self):
-    self.fitSlicesToBackground()
-    self.layoutManager.setLayout(self.three3DViewsLayoutId)
+  def onChangeLayoutButtonToggled(self, checked):
+    if checked:
+      self.newLayoutImageButton.text = "Return To Default Layout"  
+      self.fitSlicesToBackground()
+      self.layoutManager.setLayout(self.three3DViewsLayoutId)
+      if self.firstThreeDView == None:
+        viewNode1 = slicer.util.getNode('vtkMRMLViewNode1')
+        self.firstThreeDView = self.layoutManager.viewWidget(viewNode1).threeDView()
+      if self.secondThreeDView == None:
+        viewNode2 = slicer.util.getNode('vtkMRMLViewNode2')
+        self.secondThreeDView = self.layoutManager.viewWidget( viewNode2 ).threeDView()
 
-    if self.firstThreeDView == None:
-      viewNode1 = slicer.util.getNode('vtkMRMLViewNode1')
-      self.firstThreeDView = self.layoutManager.viewWidget(viewNode1).threeDView()
-    if self.secondThreeDView == None:
-      viewNode2 = slicer.util.getNode('vtkMRMLViewNode2')
-      self.secondThreeDView = self.layoutManager.viewWidget( viewNode2 ).threeDView()
+      viewNode3 = slicer.util.getNode('vtkMRMLViewNode3')
+      self.thirdThreeDView = self.layoutManager.viewWidget( viewNode3 ).threeDView()
 
-    viewNode3 = slicer.util.getNode('vtkMRMLViewNode3')
-    self.thirdThreeDView = self.layoutManager.viewWidget( viewNode3 ).threeDView()
+      cameraNodes = slicer.mrmlScene.GetNodesByName('Default Scene Camera')
+      self.thirdCamera = cameraNodes.GetItemAsObject(2)
 
-    cameraNodes = slicer.mrmlScene.GetNodesByName('Default Scene Camera')
-    self.thirdCamera = cameraNodes.GetItemAsObject(2)
+      if self.probeCalibrationTransform:
+        self.thirdCamera.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
 
-    if self.probeCalibrationTransform:
-      self.thirdCamera.SetAndObserveTransformNodeID(self.probeCalibrationTransform.GetID())
+      thirdCamera = self.thirdCamera.GetCamera()
+      thirdCamera.SetClippingRange(0.7081381565016212, 708.1381565016211)
 
-    thirdCamera = self.thirdCamera.GetCamera()
-    thirdCamera.SetClippingRange(0.7081381565016212, 708.1381565016211)
+    else:
+      self.newLayoutImageButton.text = "Add Third 3D View"  
+      self.onDefaultLayoutButton()
 
-    #self.updateGUI()
 
   def onFlipImageButton(self):
     if self.flipCompensationTransform:
@@ -2446,6 +2392,25 @@ class BronchoscopyWidget:
     else:
       self.secondCamera.SetPosition(x,y+200,z)
 
+    ####################################################################################################################
+    ####################### If requested start image registration (at bifurcation points) ##############################
+    ####################################################################################################################
+    elapsedTime = time.time() - self.time
+    if self.bifurcationPointsList != [] and elapsedTime >= 3:
+      self.bifurcationPointsList = numpy.asarray(self.bifurcationPointsList)
+      closestPoint = numpy.asarray(closestPoint)
+
+      euclDist = ((self.bifurcationPointsList-closestPoint)**2).sum(axis=1)
+      sortedDistances = euclDist.argsort()
+
+      if 10 <= sortedDistances[0] <= 15:
+        print sortedDistances[0]
+        self.registerImage()
+
+      self.bifurcationPointsList = self.bifurcationPointsList.tolist()
+      closestPoint = closestPoint.tolist()
+      self.time = time.time()
+
   def distanceToTargetComputation(self, polyData, secondPoint):
 
     numberOfPoints = polyData.GetNumberOfPoints()
@@ -2499,10 +2464,11 @@ class BronchoscopyWidget:
   def startVideoStreaming(self, checked):
     if checked:
       # Show button to start image registration
-      self.ImageRegistrationButton.show()
+      self.ImageRegistrationButton.enabled = True
 
       # start streaming video
       self.VideoRegistrationButton.setText("Stop Video Streaming")
+      self.VideoRegistrationButton.setStyleSheet("background-color: rgb(215,255,255)")
       if self.videoStreamingNode == None:
         streamingNodes = slicer.mrmlScene.GetNodesByName('streamingConnector')
         if streamingNodes.GetNumberOfItems() == 0:
@@ -2520,10 +2486,11 @@ class BronchoscopyWidget:
 
       # Stop image registration and hide button 
       self.ImageRegistrationButton.checked = False
-      self.ImageRegistrationButton.hide()
+      self.ImageRegistrationButton.enabled = False
 
       if self.videoStreamingNode != None:
         self.VideoRegistrationButton.setText("Start Video Streaming")
+        self.VideoRegistrationButton.setStyleSheet("background-color: rgb(255,255,255)")
         self.videoStreamingNode.Stop()
 
   def showVideoStreaming(self):
@@ -2542,11 +2509,18 @@ class BronchoscopyWidget:
   ################################## Image Registration #####################################
   ###########################################################################################
   def onStartImageRegistrationButtonPressed(self, checked):
-    if checked:
-      self.registrationTimer.start()
+    if checked: 
+      fileName = qt.QFileDialog.getOpenFileName()
+      print fileName
+      fileID = open(fileName, 'r')
+      for line in fileID:
+        line = eval('['+line+']')
+        self.bifurcationPointsList.append(line)
+
+      self.time = time.time()
       self.ImageRegistrationButton.text = "Stop Image Registration"
     else:
-      self.registrationTimer.stop()
+      self.bifurcationPointsList = []
       self.ImageRegistrationButton.text = "Start Image Registration"
 
   def registerImage(self):
@@ -2599,7 +2573,11 @@ class BronchoscopyWidget:
 
     # Grab 3D view
     pathModel = self.pathModelSelector.currentNode()
-    displayNode = pathModel.GetDisplayNode()    
+    displayNode = pathModel.GetDisplayNode()
+
+    ROIfids = slicer.util.getNode('ROIFiducials')
+    fidsDisplayNode = ROIfids.GetDisplayNode()
+    fidsDisplayNode.SetVisibility(0)
     
     rw = self.firstThreeDView.renderWindow()
     wti = vtk.vtkWindowToImageFilter()
@@ -2608,6 +2586,7 @@ class BronchoscopyWidget:
     slicer.app.processEvents()
     wti.Update()
     displayNode.SetVisibility(1)
+    fidsDisplayNode.SetVisibility(1)
     slicer.app.processEvents()
     
     # Convert image to gray-scale
@@ -2653,5 +2632,5 @@ class BronchoscopyWidget:
     camera = self.cameraForNavigation.GetCamera()
     camera.Roll(float(angle))
 
-    #slicer.mrmlScene.RemoveNode(movingScalarVolume)
-    #slicer.mrmlScene.RemoveNode(realScalarVolume)
+    slicer.mrmlScene.RemoveNode(movingScalarVolume)
+    slicer.mrmlScene.RemoveNode(realScalarVolume)
