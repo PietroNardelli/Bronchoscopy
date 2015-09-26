@@ -17,7 +17,7 @@ class Bronchoscopy:
     parent.title = "Bronchoscopy" # TODO make this more human readable by adding spaces
     parent.categories = ["Endoscopy"]
     parent.dependencies = []
-    parent.contributors = ["Pietro Nardelli & Alberto Corvo (University College Cork)"] 
+    parent.contributors = ["Pietro Nardelli (University College Cork)"] 
     parent.helpText = """
     Scripted module bundled in an extension for centerline extraction and virtual navigation within a 3D airway model.
     """
@@ -193,7 +193,7 @@ class BronchoscopyWidget:
                     " <item>"
                     "  <layout type=\"horizontal\">"
                     "   <item>"
-                    "    <view class=\"vtkMRMLViewNode\" singletontag=\"3\" type=\"secondary\">"
+                    "    <view class=\"vtkMRMLViewNode\" singletontag=\"3\" type=\"endoscopy\">"
                     "     <property name=\"Third3DView\" action=\"default\">3</property>"
                     "    </view>"
                     "   </item>"
@@ -222,12 +222,12 @@ class BronchoscopyWidget:
 
   def updateGUI(self):
     if(self.thirdThreeDView):
-      self.layoutManager.setLayout(15)
+      self.layoutManager.setLayout(19)
       self.layoutManager.setLayout(self.three3DViewsLayoutId)
       self.thirdThreeDView.resetFocalPoint()
       self.thirdThreeDView.lookFromViewAxis(ctk.ctkAxesWidget().Anterior)
     else:
-      self.layoutManager.setLayout(15)
+      self.layoutManager.setLayout(19)
       self.layoutManager.setLayout(self.customLayoutId)
 
     self.firstThreeDView.resetFocalPoint()
@@ -2214,7 +2214,7 @@ class BronchoscopyWidget:
           self.lastPosBeforeStoppingTracking = [0,0,0]
           self.lastViewUp = [0,0,0]
 
-      self.cameraForNavigation.SetViewAngle(55)
+      self.cameraForNavigation.SetViewAngle(50)
 
     if self.thirdThreeDView:
       self.thirdCamera = cameraNodes.GetItemAsObject(2)
@@ -2371,7 +2371,7 @@ class BronchoscopyWidget:
 
     if self.thirdCamera:
       if self.thirdCameraInitialized == 0:
-        self.thirdCamera.SetPosition(x+20,y+5,z+70)
+        self.thirdCamera.SetPosition(x-20,y+15,z+70)
       fp = [0.0,0.0,0.0]
       self.cameraForNavigation.GetFocalPoint(fp)
       self.thirdCamera.SetFocalPoint(fp)
@@ -2388,9 +2388,14 @@ class BronchoscopyWidget:
     self.secondCamera.SetFocalPoint(x,y,z)
     
     if self.length > 90:
-      self.secondCamera.SetPosition(x,y+500,z)
+      self.secondCamera.SetPosition(x,y+600,z)
+    elif 90 <= self.length < 70:
+       self.secondCamera.SetPosition(x,y+400,z)      
     else:
-      self.secondCamera.SetPosition(x,y+200,z)
+      self.secondCamera.SetPosition(x,y+150,z)
+
+    secCamera = self.secondCamera.GetCamera()
+    secCamera.SetClippingRange(0.5741049687312555, 574.1049687312554)
 
     ####################################################################################################################
     ####################### If requested start image registration (at bifurcation points) ##############################
@@ -2401,10 +2406,10 @@ class BronchoscopyWidget:
       closestPoint = numpy.asarray(closestPoint)
 
       euclDist = ((self.bifurcationPointsList-closestPoint)**2).sum(axis=1)
-      sortedDistances = euclDist.argsort()
+      minDist = min(euclDist)
 
-      if 10 <= sortedDistances[0] <= 15:
-        print sortedDistances[0]
+      print minDist
+      if 20 <= minDist <= 30:
         self.registerImage()
 
       self.bifurcationPointsList = self.bifurcationPointsList.tolist()
