@@ -7,6 +7,7 @@ from vtk.util.numpy_support import vtk_to_numpy
 import csv
 import math
 import time
+import SimpleITK as sitk
 
 #
 # Bronchoscopy
@@ -288,8 +289,8 @@ class BronchoscopyWidget:
     ###############################  Label Selector  ##################################
     ###################################################################################
     self.labelSelector = slicer.qMRMLNodeComboBox()
-    self.labelSelector.nodeTypes = ( ("vtkMRMLScalarVolumeNode"), "" )
-    self.labelSelector.addAttribute( "vtkMRMLScalarVolumeNode", "LabelMap", 1 )
+    self.labelSelector.nodeTypes = ( ("vtkMRMLLabelMapVolumeNode"), "" )
+    # self.labelSelector.addAttribute( "vtkMRMLScalarVolumeNode", "LabelMap", 1 )
     self.labelSelector.selectNodeUponCreation = True
     self.labelSelector.addEnabled = False
     self.labelSelector.removeEnabled = True
